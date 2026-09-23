@@ -571,128 +571,645 @@ function renderSubjectSelectDropdown() {
     });
 }
 
+// ตัวอย่างการปรับฟังก์ชันเรนเดอร์ช่องคะแนนในตาราง Matrix ให้เป็น Checkbox
+// 1. ฟังก์ชันเรนเดอร์ตาราง Matrix (เพิ่มช่องกรอกกลางภาค/ปลายภาค)
 function renderScoreMatrix() {
-    const container = document.getElementById("matrixContainer");
-    const subjectId = Number(document.getElementById("scoreSubjectSelect")?.value);
+    const container = document.getElementById('matrixContainer');
+    const selectedSubjectId = document.getElementById('scoreSubjectSelect').value;
 
-    if (!container) return;
-    if (!subjectId) {
-        container.innerHTML = `<p style="color: #6b7280;">กรุณาเลือกวิชาด้านบนเพื่อเริ่มกรอกคะแนน</p>`;
+    if (!selectedSubjectId) {
+        container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">กรุณาเลือกวิชาด้านบนเพื่อเริ่มกรอกคะแนน</p>';
         return;
     }
 
-    const subject = subjects.find(s => s.id === subjectId);
-    if (!subject) {
-        container.innerHTML = `<p style="color: #ef4444;">ไม่พบข้อมูลวิชา</p>`;
+    const subject = subjects.find(s => s.id == selectedSubjectId);
+    if (!subject || !subject.units || subject.units.length === 0) {
+        container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">ไม่พบข้อมูลบทเรียนในวิชานี้</p>';
         return;
     }
 
-    // กรองเฉพาะนักเรียนที่มีระดับชั้นตรงกับระดับชั้นของวิชา (เช่น "ม.6" จะตรงกับห้อง "ม.6/1", "ม.6/2")
-    const filteredStudents = students.filter(student => {
-        if (!subject.grade) return true; // ถ้าไม่ได้ระบุระดับชั้นวิชา ให้แสดงทุกคน
-        return student.className && student.className.startsWith(subject.grade);
-    });
+    // กรองรายชื่อนักเรียนตามระดับชั้นวิชา (ถ้ามีกำหนด)
+    let filteredStudents = students;
+    if (subject.grade) {
+        filteredStudents = students.filter(student => {
+            if (!student.className) return true;
+            return student.className.startsWith(subject.grade);
+        });
+    }
 
     if (filteredStudents.length === 0) {
-        container.innerHTML = `<p style="color: #ef4444;">ไม่พบรายชื่อนักเรียนในระดับชั้น ${subject.grade || 'นี้'} (กรุณาตรวจสอบชั้น/ห้องในหน้ารายชื่อนักเรียน)</p>`;
+        container.innerHTML = `<p style="color: #ef4444; text-align: center; padding: 20px;">ไม่พบรายชื่อนักเรียนระดับชั้น ${subject.grade || ''} ในระบบ</p>`;
         return;
     }
 
-    // รวบรวมคอลัมน์การสอบทั้งหมดของวิชานี้
-    let columns = [];
-    if (subject.midtermMax > 0) {
-        columns.push({ key: "midterm", label: "🎯 กลางภาค", max: subject.midtermMax, unitId: null, subUnitId: null });
-    }
-    if (subject.finalMax > 0) {
-        columns.push({ key: "final", label: "🏁 ปลายภาค", max: subject.finalMax, unitId: null, subUnitId: null });
+    // รวบรวมหน่วยย่อยทั้งหมด
+    let unitGroups = [];
+    let allSubUnits = [];
+
+    subject.units.forEach(unit => {
+        let currentSubUnits = [];
+        if (unit.subUnits && unit.subUnits.length > 0) {
+            unit.subUnits.forEach(sub => {
+                const subObj = {
+                    unitId: unit.id,
+                    unitName: unit.name,
+                    subUnitId: sub.id,
+                    subUnitName: sub.name,
+                    maxScore: sub.maxScore || sub.score || (unit.maxScore ? (unit.maxScore / unit.subUnits.length).toFixed(2) : 2)
+                };
+                currentSubUnits.push(subObj);
+                allSubUnits.push(subObj);
+            });
+        } else {
+            const subObj = {
+                unitId: unit.id,
+                unitName: unit.name,
+                subUnitId: unit.id,
+                subUnitName: unit.name,
+                maxScore: unit.maxScore || unit.score || 10
+            };
+            currentSubUnits.push(subObj);
+            allSubUnits.push(subObj);
+        }
+
+        unitGroups.push({
+            unitId: unit.id,
+            unitName: unit.name,
+            colSpan: currentSubUnits.length,
+            subUnits: currentSubUnits
+        });
+    });
+
+    const midtermMax = subject.midtermScore || 20;
+    const finalMax = subject.finalScore || 30;
+
+    // สร้างโครงสร้างหัวตาราง (เพิ่มคอลัมน์ กลางภาค และ ปลายภาค)
+    let tableHtml = `<table border="1" class="score-matrix-table" style="width: 100%; border-collapse: collapse; text-align: center; font-size: 13px;">
+        <thead>
+            <tr style="background: #e2e8f0; color: #1e293b;">
+                <th rowspan="2" style="padding: 10px; min-width: 160px; position: sticky; left: 0; background: #e2e8f0; z-index: 3; border-right: 2px solid #cbd5e1;">ชื่อ-นามสกุล</th>`;
+
+    unitGroups.forEach(group => {
+        tableHtml += `<th colspan="${group.colSpan}" style="padding: 8px; font-weight: bold; font-size: 13px; background: #dbeafe; color: #1e40af; border-left: 2px solid #93c5fd; border-right: 2px solid #93c5fd;">
+            📖 ${group.unitName}
+        </th>`;
+    });
+
+    // เพิ่มหัวข้อกลางภาค/ปลายภาคแถวบน
+    tableHtml += `<th colspan="2" style="padding: 8px; font-weight: bold; font-size: 13px; background: #fef08a; color: #854d0e; border-left: 2px solid #fde047;">🎯 คะแนนสอบ</th>
+    </tr>
+    <tr style="background: #f8fafc; color: #475569;">`;
+
+    allSubUnits.forEach(sub => {
+        tableHtml += `<th style="padding: 6px; font-size: 11px; font-weight: normal; min-width: 110px; border-bottom: 2px solid #cbd5e1;">
+            <strong>${sub.subUnitName}</strong><br>
+            <span style="color: #2563eb; font-size: 10px;">(เต็ม ${sub.maxScore})</span>
+        </th>`;
+    });
+
+    // เพิ่มหัวข้อช่องกรอกกลางภาค/ปลายภาคแถวล่าง
+    tableHtml += `<th style="padding: 6px; min-width: 90px; background: #fef9c3; border-bottom: 2px solid #cbd5e1;">กลางภาค<br><span style="color:#854d0e; font-size:10px;">(เต็ม ${midtermMax})</span></th>
+                  <th style="padding: 6px; min-width: 90px; background: #fef9c3; border-bottom: 2px solid #cbd5e1;">ปลายภาค<br><span style="color:#854d0e; font-size:10px;">(เต็ม ${finalMax})</span></th>
+    </tr></thead><tbody>`;
+
+    // วนลูปสร้างแถวนักเรียน
+    filteredStudents.forEach((student, idx) => {
+        const rowBg = idx % 2 === 0 ? "#ffffff" : "#f9fafb";
+        tableHtml += `<tr style="background: ${rowBg};">
+            <td style="padding: 8px; text-align: left; font-weight: bold; position: sticky; left: 0; background: ${rowBg}; z-index: 1; border-right: 2px solid #cbd5e1;">${student.name} <span style="font-size: 11px; color: #64748b; font-weight: normal;">(${student.className || ''})</span></td>`;
+
+        // 1. ช่องติ๊กเก็บคะแนนเก็บหน่วยย่อย
+        allSubUnits.forEach(sub => {
+            const currentRecord = scores.find(s => 
+                s.studentId == student.id && 
+                s.subjectId == subject.id && 
+                (s.subUnitId == sub.subUnitId || s.unitKey == `${sub.unitId}_${sub.subUnitId}` || s.unitId == sub.subUnitId)
+            );
+            
+            const isChecked = currentRecord && Number(currentRecord.score) > 0 ? "checked" : "";
+
+            tableHtml += `<td style="padding: 8px;">
+                <input type="checkbox" 
+                    ${isChecked} 
+                    style="transform: scale(1.4); cursor: pointer;"
+                    onchange="toggleSubUnitScore(this, '${student.id}', '${subject.id}', '${sub.unitId}', '${sub.subUnitId}', ${sub.maxScore})">
+            </td>`;
+        });
+
+        // 2. ดึงคะแนนกลางภาค / ปลายภาคเดิม
+        const midRecord = scores.find(s => s.studentId == student.id && s.subjectId == subject.id && s.unitId == 'midterm');
+        const finalRecord = scores.find(s => s.studentId == student.id && s.subjectId == subject.id && s.unitId == 'final');
+
+        const midVal = midRecord ? midRecord.score : "";
+        const finalVal = finalRecord ? finalRecord.score : "";
+
+        // ช่องกรอกคะแนนสอบกลางภาค และปลายภาค
+        tableHtml += `<td style="padding: 4px; background: #fffbebfb;">
+            <input type="number" value="${midVal}" min="0" max="${midtermMax}" placeholder="0" style="width: 60px; text-align: center; padding: 4px;"
+            onchange="saveExamScore('${student.id}', '${subject.id}', 'midterm', this.value, ${midtermMax})">
+        </td>
+        <td style="padding: 4px; background: #fffbebfb;">
+            <input type="number" value="${finalVal}" min="0" max="${finalMax}" placeholder="0" style="width: 60px; text-align: center; padding: 4px;"
+            onchange="saveExamScore('${student.id}', '${subject.id}', 'final', this.value, ${finalMax})">
+        </td>`;
+
+        tableHtml += `</tr>`;
+    });
+
+    tableHtml += `</tbody></table>`;
+    container.innerHTML = tableHtml;
+
+    // คำนวณสรุปเกรดทันทีที่เรนเดอร์ตาราง
+    calculateAndRenderSummaryScores();
+}
+
+// 2. ฟังก์ชันอัปเดตคะแนนจากการติ๊กถูก + สั่งให้คำนวณเกรดทันที
+async function toggleSubUnitScore(checkbox, studentId, subjectId, unitId, subUnitId, maxScore) {
+    const finalScore = checkbox.checked ? Number(maxScore) : 0;
+    const unitKey = `${unitId}_${subUnitId}`;
+
+    let existingIndex = scores.findIndex(s => 
+        s.studentId == studentId && 
+        s.subjectId == subjectId && 
+        (s.subUnitId == subUnitId || s.unitKey == unitKey)
+    );
+
+    if (existingIndex >= 0) {
+        scores[existingIndex].score = finalScore;
+    } else {
+        scores.push({
+            studentId: studentId,
+            subjectId: subjectId,
+            unitId: unitId,
+            subUnitId: subUnitId,
+            unitKey: unitKey,
+            score: finalScore
+        });
     }
 
-    if (subject.units) {
+    // คำนวณคะแนนรวมและเกรดใหม่ทันที
+    calculateAndRenderSummaryScores();
+
+    // บันทึกลง Google Sheets
+    try {
+        await fetch(GAS_API_URL, {
+            method: "POST",
+            body: JSON.stringify({
+                action: "saveScore",
+                studentId: studentId,
+                subjectId: subjectId,
+                unitKey: unitKey,
+                unitId: unitId,
+                subUnitId: subUnitId,
+                score: finalScore
+            })
+        });
+    } catch (e) {
+        console.error("บันทึกคะแนนล้มเหลว:", e);
+    }
+}
+
+// 3. ฟังก์ชันบันทึกคะแนนสอบกลางภาค / ปลายภาค
+async function saveExamScore(studentId, subjectId, examType, value, maxScore) {
+    let scoreVal = Number(value);
+    if (isNaN(scoreVal) || scoreVal < 0) scoreVal = 0;
+    if (scoreVal > maxScore) {
+        alert(`คะแนนต้องไม่เกิน ${maxScore}`);
+        scoreVal = maxScore;
+    }
+
+    let existingIndex = scores.findIndex(s => s.studentId == studentId && s.subjectId == subjectId && s.unitId == examType);
+    if (existingIndex >= 0) {
+        scores[existingIndex].score = scoreVal;
+    } else {
+        scores.push({
+            studentId: studentId,
+            subjectId: subjectId,
+            unitId: examType,
+            unitKey: examType,
+            score: scoreVal
+        });
+    }
+
+    // คำนวณคะแนนรวมและเกรดใหม่ทันที
+    calculateAndRenderSummaryScores();
+
+    // บันทึกลง Google Sheets
+    try {
+        await fetch(GAS_API_URL, {
+            method: "POST",
+            body: JSON.stringify({
+                action: "saveScore",
+                studentId: studentId,
+                subjectId: subjectId,
+                unitKey: examType,
+                unitId: examType,
+                score: scoreVal
+            })
+        });
+    } catch (e) {
+        console.error("บันทึกคะแนนสอบล้มเหลว:", e);
+    }
+}
+
+// 4. ฟังก์ชันคำนวณสรุปคะแนนรวม เกรด และรายงานแสดงผลด้านล่าง
+// ==========================================
+// ฟังก์ชันเรนเดอร์ตารางสรุปคะแนนรวมและเกรด (คำนวณสัดส่วนโควตาจริง)
+// ==========================================
+function calculateAndRenderSummaryScores() {
+    const selectedSubjectId = document.getElementById('scoreSubjectSelect')?.value;
+    if (!selectedSubjectId) return;
+
+    const subject = subjects.find(s => String(s.id).trim() === String(selectedSubjectId).trim());
+    if (!subject) return;
+
+    const scoreTable = document.getElementById('scoreTable');
+    if (!scoreTable) return;
+
+    scoreTable.innerHTML = "";
+
+    // 1. ดึงคะแนนเต็มกลางภาค และ ปลายภาค
+    const midMax = Number(subject.midtermMax || subject.midtermScore || 20);
+    const finalMax = Number(subject.finalMax || subject.finalScore || 20);
+
+    // 2. คำนวณโควตาคะแนนเก็บที่เหลือ (เช่น 100 - 20 - 20 = 60)
+    const remainingQuota = Math.max(0, 100 - midMax - finalMax);
+
+    // 3. หาผลรวมคะแนนเต็มดิบของทุกหน่วยย่อยในวิชานี้
+    let totalRawUnitsMax = 0;
+    if (subject.units && subject.units.length > 0) {
         subject.units.forEach(unit => {
             if (unit.subUnits && unit.subUnits.length > 0) {
                 unit.subUnits.forEach(sub => {
-                    columns.push({
-                        key: `${unit.id}_${sub.id}`,
-                        label: `📖 ${unit.name} - ${sub.name}`,
-                        max: sub.maxScore,
-                        unitId: unit.id,
-                        subUnitId: sub.id
-                    });
+                    totalRawUnitsMax += Number(sub.maxScore || sub.score || 10);
                 });
             } else {
-                columns.push({
-                    key: `${unit.id}_none`,
-                    label: `📖 บท: ${unit.name}`,
-                    max: unit.maxScore,
-                    unitId: unit.id,
-                    subUnitId: null
-                });
+                totalRawUnitsMax += Number(unit.maxScore || unit.score || 10);
             }
         });
     }
 
-    // สร้างตาราง Matrix
-    let html = `
-        <div style="margin-bottom: 10px; font-weight: bold; color: #1d4ed8;">
-            📌 กำลังแสดงรายชื่อนักเรียนระดับชั้น: <span style="background: #2563eb; color: white; padding: 2px 8px; border-radius: 4px;">${subject.grade || 'แสดงทั้งหมด'}</span> (จำนวน ${filteredStudents.length} คน)
-        </div>
-        <table border="1" style="width: 100%; border-collapse: collapse; font-size: 14px; text-align: center;">
-            <thead>
-                <tr style="background-color: #f3f4f6;">
-                    <th style="padding: 10px; min-width: 60px;">รหัส</th>
-                    <th style="padding: 10px; min-width: 150px; text-align: left;">ชื่อ-สกุล</th>
-                    <th style="padding: 10px; min-width: 80px;">ห้อง</th>
-                    ${columns.map(col => `
-                        <th style="padding: 10px; min-width: 110px;">
-                            ${col.label}<br>
-                            <span style="font-size: 11px; color: #2563eb;">(เต็ม ${col.max})</span>
-                        </th>
-                    `).join('')}
-                </tr>
-            </thead>
-            <tbody>
-    `;
+    let filteredStudents = students;
+    if (subject.grade) {
+        filteredStudents = students.filter(s => !s.className || s.className.startsWith(subject.grade));
+    }
 
     filteredStudents.forEach(student => {
-        html += `
-            <tr>
-                <td style="padding: 8px;">${student.code || "-"}</td>
-                <td style="padding: 8px; text-align: left;"><b>${student.name}</b></td>
-                <td style="padding: 8px;">${student.className}</td>
-        `;
+        // 4. คำนวณคะแนนดิบที่ติ๊กได้ในส่วนบทเรียน
+        let studentRawUnitsScore = 0;
+        if (subject.units && subject.units.length > 0) {
+            subject.units.forEach(unit => {
+                if (unit.subUnits && unit.subUnits.length > 0) {
+                    unit.subUnits.forEach(sub => {
+                        const rec = scores.find(s => 
+                            String(s.studentId).trim() === String(student.id).trim() && 
+                            String(s.subjectId).trim() === String(subject.id).trim() && 
+                            (String(s.subUnitId).trim() === String(sub.id).trim() || s.unitKey === `${unit.id}_${sub.id}`)
+                        );
+                        if (rec && Number(rec.score) > 0) {
+                            // ใช้ค่า rawScore ถ้ามี หรือใช้ maxScore ของ subUnit เมื่อติ๊กถูก
+                            studentRawUnitsScore += Number(rec.rawScore || sub.maxScore || sub.score || 10);
+                        }
+                    });
+                } else {
+                    const rec = scores.find(s => 
+                        String(s.studentId).trim() === String(student.id).trim() && 
+                        String(s.subjectId).trim() === String(subject.id).trim() && 
+                        String(s.unitId).trim() === String(unit.id).trim() && !s.subUnitId
+                    );
+                    if (rec && Number(rec.score) > 0) {
+                        studentRawUnitsScore += Number(rec.rawScore || unit.maxScore || unit.score || 10);
+                    }
+                }
+            });
+        }
 
-        columns.forEach(col => {
-            const currentScoreObj = scores.find(
-                s => s.studentId === student.id && s.subjectId === subject.id && s.unitValue === col.key
-            );
-            const val = currentScoreObj !== undefined ? currentScoreObj.score : "";
+        // 5. ทอนสัดส่วนคะแนนเก็บให้อยู่ในโควตาที่เหลือ (เช่น ได้เต็มดิบ -> ทอนเหลือ 60)
+        let weightedUnitsScore = totalRawUnitsMax > 0 
+            ? (studentRawUnitsScore / totalRawUnitsMax) * remainingQuota 
+            : 0;
 
-            html += `
-                <td style="padding: 5px;">
-                    <input 
-                        type="number" 
-                        step="0.1"
-                        min="0"
-                        max="${col.max}"
-                        value="${val}" 
-                        placeholder="-"
-                        style="width: 70px; text-align: center; padding: 6px; border: 1px solid #d1d5db; border-radius: 4px;"
-                        onchange="saveMatrixScore(${student.id}, ${subject.id}, '${col.key}', ${col.unitId}, ${col.subUnitId}, ${col.max}, this)"
-                    />
-                </td>
-            `;
+        // 6. ดึงคะแนนสอบกลางภาค / ปลายภาค จริง
+        const midRec = scores.find(s => 
+            String(s.studentId).trim() === String(student.id).trim() && 
+            String(s.subjectId).trim() === String(subject.id).trim() && 
+            (s.unitValue === 'midterm' || s.unitId === 'midterm' || s.unitKey === 'midterm')
+        );
+        const finalRec = scores.find(s => 
+            String(s.studentId).trim() === String(student.id).trim() && 
+            String(s.subjectId).trim() === String(subject.id).trim() && 
+            (s.unitValue === 'final' || s.unitId === 'final' || s.unitKey === 'final')
+        );
+
+        const midScore = midRec ? Number(midRec.score || 0) : 0;
+        const finalScore = finalRec ? Number(finalRec.score || 0) : 0;
+
+        // 7. คะแนนรวมสุทธิทั้งหมด
+        const finalTotalScore = weightedUnitsScore + midScore + finalScore;
+
+        // 8. คำนวณเกรด
+        let grade = "0";
+        if (finalTotalScore >= 80) grade = "4";
+        else if (finalTotalScore >= 75) grade = "3.5";
+        else if (finalTotalScore >= 70) grade = "3";
+        else if (finalTotalScore >= 65) grade = "2.5";
+        else if (finalTotalScore >= 60) grade = "2";
+        else if (finalTotalScore >= 55) grade = "1.5";
+        else if (finalTotalScore >= 50) grade = "1";
+
+        scoreTable.innerHTML += `<tr>
+            <td style="padding: 8px;">${student.code || student.id}</td>
+            <td style="padding: 8px; font-weight: bold;">${student.name}</td>
+            <td style="padding: 8px;">${subject.name}</td>
+            <td style="padding: 8px; font-weight: bold; color: #2563eb;">${finalTotalScore.toFixed(2)} / 100</td>
+            <td style="padding: 8px;">${finalTotalScore.toFixed(2)}%</td>
+            <td style="padding: 8px; font-weight: bold; color: ${grade === '0' ? '#ef4444' : '#10b981'};">${grade}</td>
+        </tr>`;
+    });
+}
+
+// ==========================================
+// 1. ฟังก์ชันบันทึกการติ๊ก Checkbox (ทอนสัดส่วนตามโควตาคะแนนเก็บทันที)
+// ==========================================
+async function toggleSubUnitScore(checkbox, studentId, subjectId, unitId, subUnitId, rawMaxScore) {
+    const subject = subjects.find(s => String(s.id).trim() === String(subjectId).trim());
+    if (!subject) return;
+
+    // คำนวณโควตาคะแนนเก็บที่เหลือ (เช่น 100 - กลางภาค 20 - ปลายภาค 20 = 60 คะแนน)
+    const midMax = Number(subject.midtermMax || subject.midtermScore || 20);
+    const finalMax = Number(subject.finalMax || subject.finalScore || 20);
+    const remainingQuota = Math.max(0, 100 - midMax - finalMax);
+
+    // หาคะแนนดิบรวมทั้งหมดของวิชานี้
+    let totalRawUnitsMax = 0;
+    if (subject.units && subject.units.length > 0) {
+        subject.units.forEach(u => {
+            if (u.subUnits && u.subUnits.length > 0) {
+                u.subUnits.forEach(s => { totalRawUnitsMax += Number(s.maxScore || s.score || 10); });
+            } else {
+                totalRawUnitsMax += Number(u.maxScore || u.score || 10);
+            }
         });
+    }
 
-        html += `</tr>`;
+    // คำนวณน้ำหนักคะแนนต่อน้ำหนักดิบ 1 หน่วย
+    const weightFactor = totalRawUnitsMax > 0 ? (remainingQuota / totalRawUnitsMax) : 1;
+
+    // คะแนนดิบช่องนี้ x น้ำหนักสัดส่วนจริง (เช่น ติ๊กได้ดิบ 10 -> บันทึกจริงเป็นสัดส่วนของ 60)
+    const rawScoreVal = checkbox.checked ? Number(rawMaxScore) : 0;
+    const finalWeightedScore = rawScoreVal * weightFactor;
+
+    const unitKey = `${unitId}_${subUnitId}`;
+
+    let existingIndex = scores.findIndex(s => 
+        String(s.studentId).trim() === String(studentId).trim() && 
+        String(s.subjectId).trim() === String(subjectId).trim() && 
+        (String(s.subUnitId).trim() === String(subUnitId).trim() || s.unitKey === unitKey)
+    );
+
+    if (existingIndex >= 0) {
+        scores[existingIndex].score = finalWeightedScore;
+        scores[existingIndex].rawScore = rawScoreVal; // เก็บค่าดิบไว้เช็กติ๊ก
+    } else {
+        scores.push({
+            studentId: studentId,
+            subjectId: subjectId,
+            unitId: unitId,
+            subUnitId: subUnitId,
+            unitKey: unitKey,
+            score: finalWeightedScore,
+            rawScore: rawScoreVal
+        });
+    }
+
+    // คำนวณและอัปเดตตารางสรุปคะแนนสดๆ ทันที
+    if (typeof calculateAndRenderSummaryScores === 'function') {
+        calculateAndRenderSummaryScores();
+    }
+
+    // บันทึกลง Google Sheets (ถ้ามี)
+    if (typeof GAS_API_URL !== 'undefined') {
+        try {
+            await fetch(GAS_API_URL, {
+                method: "POST",
+                body: JSON.stringify({
+                    action: "saveScore",
+                    studentId: studentId,
+                    subjectId: subjectId,
+                    unitKey: unitKey,
+                    unitId: unitId,
+                    subUnitId: subUnitId,
+                    score: finalWeightedScore
+                })
+            });
+        } catch (e) {
+            console.error("บันทึกคะแนนล้มเหลว:", e);
+        }
+    }
+}
+
+// ==========================================
+// 2. ฟังก์ชันเรนเดอร์ตาราง Matrix (แสดงคะแนนเต็มช่องละเท่าไหร่ตามสัดส่วน)
+// ==========================================
+function renderScoreMatrix() {
+    const container = document.getElementById('matrixContainer');
+    const selectedSubjectId = document.getElementById('scoreSubjectSelect')?.value;
+
+    if (!selectedSubjectId) {
+        container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">กรุณาเลือกวิชาด้านบนเพื่อเริ่มกรอกคะแนน</p>';
+        return;
+    }
+
+    const subject = subjects.find(s => String(s.id).trim() === String(selectedSubjectId).trim());
+    if (!subject || !subject.units || subject.units.length === 0) {
+        container.innerHTML = '<p style="color: #6b7280; text-align: center; padding: 20px;">ไม่พบข้อมูลบทเรียนในวิชานี้</p>';
+        return;
+    }
+
+    // คำนวณโควตาคะแนนเก็บและสัดส่วน
+    const midMax = Number(subject.midtermMax || subject.midtermScore || 20);
+    const finalMax = Number(subject.finalMax || subject.finalScore || 20);
+    const remainingQuota = Math.max(0, 100 - midMax - finalMax);
+
+    let totalRawUnitsMax = 0;
+    subject.units.forEach(u => {
+        if (u.subUnits && u.subUnits.length > 0) {
+            u.subUnits.forEach(s => { totalRawUnitsMax += Number(s.maxScore || s.score || 10); });
+        } else {
+            totalRawUnitsMax += Number(u.maxScore || u.score || 10);
+        }
     });
 
-    html += `
-            </tbody>
-        </table>
-        <p style="font-size: 12px; color: #10b981; margin-top: 10px;">✨ ระบบจะบันทึกคะแนนลงฐานข้อมูลให้อัตโนมัติทันทีที่พิมพ์หรือกด Tab เปลี่ยนช่อง</p>
-    `;
+    const weightFactor = totalRawUnitsMax > 0 ? (remainingQuota / totalRawUnitsMax) : 1;
 
-    container.innerHTML = html;
+    let filteredStudents = students;
+    if (subject.grade) {
+        filteredStudents = students.filter(s => !s.className || s.className.startsWith(subject.grade));
+    }
+
+    let unitGroups = [];
+    let allSubUnits = [];
+
+    subject.units.forEach(unit => {
+        let currentSubUnits = [];
+        if (unit.subUnits && unit.subUnits.length > 0) {
+            unit.subUnits.forEach(sub => {
+                const rawMax = Number(sub.maxScore || sub.score || 10);
+                const weightedMax = rawMax * weightFactor; // คะแนนเต็มช่องนี้แบบสัดส่วนจริง
+                const subObj = {
+                    unitId: unit.id,
+                    unitName: unit.name,
+                    subUnitId: sub.id,
+                    subUnitName: sub.name,
+                    rawMaxScore: rawMax,
+                    maxScore: weightedMax.toFixed(2)
+                };
+                currentSubUnits.push(subObj);
+                allSubUnits.push(subObj);
+            });
+        } else {
+            const rawMax = Number(unit.maxScore || unit.score || 10);
+            const weightedMax = rawMax * weightFactor;
+            const subObj = {
+                unitId: unit.id,
+                unitName: unit.name,
+                subUnitId: unit.id,
+                subUnitName: unit.name,
+                rawMaxScore: rawMax,
+                maxScore: weightedMax.toFixed(2)
+            };
+            currentSubUnits.push(subObj);
+            allSubUnits.push(subObj);
+        }
+
+        unitGroups.push({
+            unitId: unit.id,
+            unitName: unit.name,
+            colSpan: currentSubUnits.length,
+            subUnits: currentSubUnits
+        });
+    });
+
+    let tableHtml = `<table border="1" class="score-matrix-table" style="width: 100%; border-collapse: collapse; text-align: center; font-size: 13px;">
+        <thead>
+            <tr style="background: #e2e8f0; color: #1e293b;">
+                <th rowspan="2" style="padding: 10px; min-width: 160px; position: sticky; left: 0; background: #e2e8f0; z-index: 3; border-right: 2px solid #cbd5e1;">ชื่อ-นามสกุล</th>`;
+
+    unitGroups.forEach(group => {
+        tableHtml += `<th colspan="${group.colSpan}" style="padding: 8px; font-weight: bold; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd;">
+            📖 ${group.unitName}
+        </th>`;
+    });
+
+    tableHtml += `<th colspan="2" style="padding: 8px; font-weight: bold; background: #fef08a; color: #854d0e; border: 1px solid #fde047;">🎯 คะแนนสอบ</th>
+    </tr>
+    <tr style="background: #f8fafc; color: #475569;">`;
+
+    allSubUnits.forEach(sub => {
+        tableHtml += `<th style="padding: 6px; font-size: 11px; font-weight: normal; min-width: 100px; border-bottom: 2px solid #cbd5e1;">
+            <strong>${sub.subUnitName}</strong><br>
+            <span style="color: #2563eb; font-size: 10px;">(เต็ม ${sub.maxScore})</span>
+        </th>`;
+    });
+
+    tableHtml += `<th style="padding: 6px; min-width: 85px; background: #fef9c3;">กลางภาค<br><span style="color:#854d0e; font-size:10px;">(เต็ม ${midMax})</span></th>
+                  <th style="padding: 6px; min-width: 85px; background: #fef9c3;">ปลายภาค<br><span style="color:#854d0e; font-size:10px;">(เต็ม ${finalMax})</span></th>
+    </tr></thead><tbody>`;
+
+    filteredStudents.forEach((student, idx) => {
+        const rowBg = idx % 2 === 0 ? "#ffffff" : "#f9fafb";
+        tableHtml += `<tr style="background: ${rowBg};">
+            <td style="padding: 8px; text-align: left; font-weight: bold; position: sticky; left: 0; background: ${rowBg}; z-index: 1; border-right: 2px solid #cbd5e1;">
+                ${student.name} <span style="font-size: 11px; color: #64748b; font-weight: normal;">(${student.className || ''})</span>
+            </td>`;
+
+        allSubUnits.forEach(sub => {
+            const currentRecord = scores.find(s => 
+                String(s.studentId).trim() === String(student.id).trim() && 
+                String(s.subjectId).trim() === String(subject.id).trim() && 
+                (String(s.subUnitId).trim() === String(sub.subUnitId).trim() || s.unitKey === `${sub.unitId}_${sub.subUnitId}`)
+            );
+            
+            const isChecked = currentRecord && Number(currentRecord.score) > 0 ? "checked" : "";
+
+            tableHtml += `<td style="padding: 8px;">
+                <input type="checkbox" 
+                    ${isChecked} 
+                    style="transform: scale(1.4); cursor: pointer;"
+                    onchange="toggleSubUnitScore(this, '${student.id}', '${subject.id}', '${sub.unitId}', '${sub.subUnitId}', ${sub.rawMaxScore})">
+            </td>`;
+        });
+
+        const midRecord = scores.find(s => String(s.studentId).trim() === String(student.id).trim() && String(s.subjectId).trim() === String(subject.id).trim() && (s.unitId === 'midterm' || s.unitKey === 'midterm'));
+        const finalRecord = scores.find(s => String(s.studentId).trim() === String(student.id).trim() && String(s.subjectId).trim() === String(subject.id).trim() && (s.unitId === 'final' || s.unitKey === 'final'));
+
+        tableHtml += `<td style="padding: 4px; background: #fffbebfb;">
+            <input type="number" value="${midRecord ? midRecord.score : ''}" min="0" max="${midMax}" placeholder="0" style="width: 55px; text-align: center; padding: 4px;"
+            onchange="saveExamScore('${student.id}', '${subject.id}', 'midterm', this.value, ${midMax})">
+        </td>
+        <td style="padding: 4px; background: #fffbebfb;">
+            <input type="number" value="${finalRecord ? finalRecord.score : ''}" min="0" max="${finalMax}" placeholder="0" style="width: 55px; text-align: center; padding: 4px;"
+            onchange="saveExamScore('${student.id}', '${subject.id}', 'final', this.value, ${finalMax})">
+        </td>`;
+
+        tableHtml += `</tr>`;
+    });
+
+    tableHtml += `</tbody></table>`;
+    container.innerHTML = tableHtml;
+
+    if (typeof calculateAndRenderSummaryScores === 'function') {
+        calculateAndRenderSummaryScores();
+    }
+}
+
+// ==========================================
+// 3. ฟังก์ชันสรุปคะแนนรวมรวมทุกส่วน (คะแนนเก็บสัดส่วน + กลางภาค + ปลายภาค)
+// ==========================================
+function calculateAndRenderSummaryScores() {
+    const selectedSubjectId = document.getElementById('scoreSubjectSelect')?.value;
+    if (!selectedSubjectId) return;
+
+    const subject = subjects.find(s => String(s.id).trim() === String(selectedSubjectId).trim());
+    if (!subject) return;
+
+    const scoreTable = document.getElementById('scoreTable');
+    if (!scoreTable) return;
+
+    scoreTable.innerHTML = "";
+
+    let filteredStudents = students;
+    if (subject.grade) {
+        filteredStudents = students.filter(s => !s.className || s.className.startsWith(subject.grade));
+    }
+
+    filteredStudents.forEach(student => {
+        // รวมคะแนนเก็บที่ผ่านการทอนสัดส่วนแล้ว
+        const studentScores = scores.filter(s => String(s.studentId).trim() === String(student.id).trim() && String(s.subjectId).trim() === String(subject.id).trim());
+        let totalScore = 0;
+
+        studentScores.forEach(s => {
+            totalScore += Number(s.score || 0);
+        });
+
+        let grade = "0";
+        if (totalScore >= 80) grade = "4";
+        else if (totalScore >= 75) grade = "3.5";
+        else if (totalScore >= 70) grade = "3";
+        else if (totalScore >= 65) grade = "2.5";
+        else if (totalScore >= 60) grade = "2";
+        else if (totalScore >= 55) grade = "1.5";
+        else if (totalScore >= 50) grade = "1";
+
+        scoreTable.innerHTML += `<tr>
+            <td style="padding: 8px;">${student.code || student.id}</td>
+            <td style="padding: 8px; font-weight: bold;">${student.name}</td>
+            <td style="padding: 8px;">${subject.name}</td>
+            <td style="padding: 8px; font-weight: bold; color: #2563eb;">${totalScore.toFixed(2)} / 100</td>
+            <td style="padding: 8px;">${totalScore.toFixed(2)}%</td>
+            <td style="padding: 8px; font-weight: bold; color: ${grade === '0' ? '#ef4444' : '#10b981'};">${grade}</td>
+        </tr>`;
+    });
 }
 function saveMatrixScore(studentId, subjectId, unitValue, unitId, subUnitId, maxAllowed, inputElem) {
     const scoreVal = inputElem.value.trim();
@@ -744,62 +1261,329 @@ function saveMatrixScore(studentId, subjectId, unitValue, unitId, subUnitId, max
 // ==============================
 // คำนวณคะแนนรวมและเกรด (เพิ่มระบบเกรดตัวเลข 0 - 4)
 // ==============================
+// ==========================================
+// ฟังก์ชันสร้างรายงาน PDF (สรุปคะแนนรวมแยกตามบทเรียน)
+// ==========================================
 
-function calculateSubjectTotal(studentId, subjectId) {
+// 1. ส่งออกรายงานรายคน
+async function exportSingleStudentPDF() {
+    const studentSelect = document.getElementById("singleStudentSelect") || document.getElementById("pdfStudentSelect");
+    const subjectId = Number(document.getElementById("scoreSubjectSelect")?.value);
+
+    if (!subjectId) {
+        alert("กรุณาเลือกรายวิชาก่อนครับ");
+        return;
+    }
+    const studentId = Number(studentSelect?.value);
+    if (!studentId) {
+        alert("กรุณาเลือกนักเรียนที่ต้องการออกรายงานครับ");
+        return;
+    }
+
+    const student = students.find(s => s.id === studentId);
     const subject = subjects.find(s => s.id === subjectId);
-    if (!subject) return { totalScore: 0, percent: 0, grade: "0", gradeLetter: "F" };
+    const printArea = document.getElementById("pdfPrintArea");
 
-    const studentScores = scores.filter(s => s.studentId === studentId && s.subjectId === subjectId);
-    let totalScore = 0;
+    printArea.style.display = "block";
+    printArea.innerHTML = "";
 
-    const midterm = studentScores.find(s => s.unitValue === "midterm");
-    if (midterm) totalScore += midterm.score;
+    const card = buildStudentReportCard(student, subject);
+    printArea.appendChild(card);
 
-    const final = studentScores.find(s => s.unitValue === "final");
-    if (final) totalScore += final.score;
+    const opt = {
+        margin:       [8, 8, 8, 8],
+        filename:     `รายงานคะแนน_${student.name}_${subject.code || subject.name}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+    };
 
-    if (subject.units) {
+    await html2pdf().set(opt).from(printArea).save();
+    printArea.style.display = "none";
+}
+
+// 2. ส่งออกรายงานทั้งชั้นเรียน
+async function exportClassPDF() {
+    const subjectId = Number(document.getElementById("scoreSubjectSelect")?.value);
+
+    if (!subjectId) {
+        alert("กรุณาเลือกรายวิชาก่อนครับ");
+        return;
+    }
+
+    const subject = subjects.find(s => s.id === subjectId);
+    const filteredStudents = students.filter(student => {
+        if (!subject.grade) return true;
+        return student.className && student.className.startsWith(subject.grade);
+    });
+
+    if (filteredStudents.length === 0) {
+        alert("ไม่พบนักเรียนในระดับชั้นนี้");
+        return;
+    }
+
+    const printArea = document.getElementById("pdfPrintArea");
+    printArea.style.display = "block";
+    printArea.innerHTML = "";
+
+    for (let i = 0; i < filteredStudents.length; i++) {
+        const student = filteredStudents[i];
+        const card = buildStudentReportCard(student, subject);
+        if (i < filteredStudents.length - 1) {
+            card.style.pageBreakAfter = "always";
+        }
+        printArea.appendChild(card);
+    }
+
+    const opt = {
+        margin:       [8, 8, 8, 8],
+        filename:     `รายงานคะแนนชั้นเรียน_${subject.grade || ''}_${subject.code || subject.name}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    await html2pdf().set(opt).from(printArea).save();
+    printArea.style.display = "none";
+}
+
+// ==========================================
+// ฟังก์ชันสร้างการ์ดรายงาน (ใช้ calculateSubjectTotal)
+// ==========================================
+// ==========================================
+// ฟังก์ชันคำนวณคะแนนรวมและเกรดหลัก (ปรับสัดส่วนรวม 100 คะแนนเต็ม)
+// ==========================================
+function calculateSubjectTotal(studentId, subjectId) {
+    const subject = subjects.find(s => String(s.id).trim() === String(subjectId).trim());
+    if (!subject) return { totalScore: "0.00", gradeNum: "0", gradeLetter: "F" };
+
+    // 1. ดึงคะแนนสอบกลางภาค / ปลายภาค
+    const midMax = Number(subject.midtermMax || subject.midtermScore || 20);
+    const finalMax = Number(subject.finalMax || subject.finalScore || 20);
+
+    // 2. คำนวณโควตาคะแนนเก็บที่เหลือ (เช่น 100 - 20 - 20 = 60 คะแนน)
+    const remainingQuota = Math.max(0, 100 - midMax - finalMax);
+
+    // 3. คำนวณคะแนนดิบรวมทั้งหมดของบทเรียนที่มีในรายวิชานี้ (Raw Max Score Total)
+    let totalRawUnitsMax = 0;
+    if (subject.units && subject.units.length > 0) {
         subject.units.forEach(unit => {
             if (unit.subUnits && unit.subUnits.length > 0) {
                 unit.subUnits.forEach(sub => {
-                    const subScoreRecord = studentScores.find(s => s.subUnitId === sub.id);
-                    if (subScoreRecord) {
-                        totalScore += subScoreRecord.score;
-                    }
+                    totalRawUnitsMax += Number(sub.maxScore || sub.score || 10);
                 });
             } else {
-                const unitScoreRecord = studentScores.find(s => s.unitId === unit.id && !s.subUnitId);
-                if (unitScoreRecord) {
-                    totalScore += unitScoreRecord.score;
-                }
+                totalRawUnitsMax += Number(unit.maxScore || unit.score || 10);
             }
         });
     }
 
-    const percent = Math.min(100, totalScore);
-    
-    // คำนวณเกรดตัวเลขและเกรดตัวอักษร
+    // 4. คำนวณคะแนนดิบที่นักเรียนทำได้ในส่วนบทเรียน
+    let studentRawUnitsScore = 0;
+    if (subject.units && subject.units.length > 0) {
+        subject.units.forEach(unit => {
+            if (unit.subUnits && unit.subUnits.length > 0) {
+                unit.subUnits.forEach(sub => {
+                    const rec = scores.find(s => 
+                        String(s.studentId).trim() === String(studentId).trim() && 
+                        String(s.subjectId).trim() === String(subjectId).trim() && 
+                        (String(s.subUnitId).trim() === String(sub.id).trim() || s.unitKey === `${unit.id}_${sub.id}`)
+                    );
+                    if (rec) studentRawUnitsScore += Number(rec.score || 0);
+                });
+            } else {
+                const rec = scores.find(s => 
+                    String(s.studentId).trim() === String(studentId).trim() && 
+                    String(s.subjectId).trim() === String(subjectId).trim() && 
+                    String(s.unitId).trim() === String(unit.id).trim() && !s.subUnitId
+                );
+                if (rec) studentRawUnitsScore += Number(rec.score || 0);
+            }
+        });
+    }
+
+    // 5. ทอนสัดส่วนคะแนนเก็บให้อยู่ในโควตาที่เหลือ
+    let weightedUnitsScore = totalRawUnitsMax > 0 
+        ? (studentRawUnitsScore / totalRawUnitsMax) * remainingQuota 
+        : 0;
+
+    // 6. ดึงคะแนนสอบกลางภาคและปลายภาคจริง
+    const midRec = scores.find(s => 
+        String(s.studentId).trim() === String(studentId).trim() && 
+        String(s.subjectId).trim() === String(subjectId).trim() && 
+        (s.unitValue === 'midterm' || s.unitId === 'midterm' || s.unitKey === 'midterm')
+    );
+    const finalRec = scores.find(s => 
+        String(s.studentId).trim() === String(studentId).trim() && 
+        String(s.subjectId).trim() === String(subjectId).trim() && 
+        (s.unitValue === 'final' || s.unitId === 'final' || s.unitKey === 'final')
+    );
+
+    const midScore = midRec ? Number(midRec.score || 0) : 0;
+    const finalScore = finalRec ? Number(finalRec.score || 0) : 0;
+
+    // 7. คำนวณคะแนนสุทธิรวมทั้งหมด (เต็ม 100)
+    const finalTotalScore = weightedUnitsScore + midScore + finalScore;
+
+    // 8. คำนวณระดับผลการเรียน (เกรด)
     let gradeNum = "0";
     let gradeLetter = "F";
 
-    if (percent >= 80) { gradeNum = "4";   gradeLetter = "A";  }
-    else if (percent >= 75) { gradeNum = "3.5"; gradeLetter = "B+"; }
-    else if (percent >= 70) { gradeNum = "3";   gradeLetter = "B";  }
-    else if (percent >= 65) { gradeNum = "2.5"; gradeLetter = "C+"; }
-    else if (percent >= 60) { gradeNum = "2";   gradeLetter = "C";  }
-    else if (percent >= 55) { gradeNum = "1.5"; gradeLetter = "D+"; }
-    else if (percent >= 50) { gradeNum = "1";   gradeLetter = "D";  }
-    else { gradeNum = "0"; gradeLetter = "F"; }
+    if (finalTotalScore >= 80) { gradeNum = "4"; gradeLetter = "A"; }
+    else if (finalTotalScore >= 75) { gradeNum = "3.5"; gradeLetter = "B+"; }
+    else if (finalTotalScore >= 70) { gradeNum = "3"; gradeLetter = "B"; }
+    else if (finalTotalScore >= 65) { gradeNum = "2.5"; gradeLetter = "C+"; }
+    else if (finalTotalScore >= 60) { gradeNum = "2"; gradeLetter = "C"; }
+    else if (finalTotalScore >= 55) { gradeNum = "1.5"; gradeLetter = "D+"; }
+    else if (finalTotalScore >= 50) { gradeNum = "1"; gradeLetter = "D"; }
 
     return {
-        totalScore: totalScore.toFixed(2),
-        percent: percent.toFixed(1),
-        gradeNum: gradeNum,         // เกรดตัวเลข (0, 1, 1.5, 2, 2.5, 3, 3.5, 4)
-        gradeLetter: gradeLetter,   // เกรดตัวอักษร (F, D, D+, C, C+, B, B+, A)
-        gradeFull: `${gradeNum} (${gradeLetter})` // แสดงคู่กัน เช่น 4 (A)
+        totalScore: finalTotalScore.toFixed(2),
+        gradeNum: gradeNum,
+        gradeLetter: gradeLetter
     };
 }
+// ==========================================
+// ฟังก์ชันสร้างการ์ดรายงาน (ปรับสัดส่วนคะแนนเก็บให้รวมได้ 100 พอดี)
+// ==========================================
 
+function buildStudentReportCard(student, subject) {
+    const cardContainer = document.createElement("div");
+    cardContainer.style.cssText = "padding: 10px 15px; font-family: 'Sarabun', sans-serif; color: #1e293b; background: #fff; box-sizing: border-box;";
+
+    // 1. ดึงคะแนนเต็มกลางภาคและปลายภาคที่กำหนดไว้
+    const midMax = Number(subject.midtermMax || subject.midtermScore || 20);
+    const finalMax = Number(subject.finalMax || subject.finalScore || 20);
+
+    // 2. คำนวณโควตาคะแนนเก็บที่เหลือ (เช่น 100 - 20 - 20 = 60 คะแนน)
+    const remainingQuota = Math.max(0, 100 - midMax - finalMax);
+
+    // 3. คำนวณคะแนนดิบรวมของทุกบทเรียน (Raw Scores Sum)
+    let totalRawUnitsMax = 0;
+    if (subject.units && subject.units.length > 0) {
+        subject.units.forEach(unit => {
+            if (unit.subUnits && unit.subUnits.length > 0) {
+                unit.subUnits.forEach(sub => {
+                    totalRawUnitsMax += Number(sub.maxScore || sub.score || 10);
+                });
+            } else {
+                totalRawUnitsMax += Number(unit.maxScore || unit.score || 10);
+            }
+        });
+    }
+
+    // 4. วนลูปคำนวณคะแนนแต่ละบทเรียนตามสัดส่วน
+    let rowsHtml = "";
+    let totalWeightedUnitScore = 0;
+
+    if (subject.units && subject.units.length > 0) {
+        subject.units.forEach(unit => {
+            let rawUnitScore = 0;
+            let rawUnitMax = 0;
+
+            if (unit.subUnits && unit.subUnits.length > 0) {
+                unit.subUnits.forEach(sub => {
+                    const subMax = Number(sub.maxScore || sub.score || 10);
+                    rawUnitMax += subMax;
+
+                    const rec = scores.find(s => s.studentId === student.id && s.subjectId === subject.id && s.subUnitId === sub.id);
+                    if (rec) rawUnitScore += Number(rec.score || 0);
+                });
+            } else {
+                rawUnitMax = Number(unit.maxScore || unit.score || 10);
+                const rec = scores.find(s => s.studentId === student.id && s.subjectId === subject.id && s.unitId === unit.id && !s.subUnitId);
+                if (rec) rawUnitScore += Number(rec.score || 0);
+            }
+
+            // คำนวณทอนสัดส่วนให้อยู่ในโควตาคะแนนเก็บที่เหลือ
+            let weightedUnitMax = totalRawUnitsMax > 0 ? (rawUnitMax / totalRawUnitsMax) * remainingQuota : 0;
+            let weightedUnitScore = totalRawUnitsMax > 0 ? (rawUnitScore / totalRawUnitsMax) * remainingQuota : 0;
+
+            totalWeightedUnitScore += weightedUnitScore;
+
+            const statusTag = rawUnitScore > 0 
+                ? `<span style="color: #16a34a; font-weight: bold;">✅ ส่งแล้ว</span>`
+                : `<span style="color: #dc2626; font-weight: bold;">❌ ยังไม่ส่ง/ไม่มีคะแนน</span>`;
+
+            rowsHtml += `
+                <tr>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px 10px; font-weight: bold;">📖 ${unit.name}</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-weight: bold; color: #2563eb;">${weightedUnitScore.toFixed(2)}</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; color: #64748b;">${weightedUnitMax.toFixed(2)}</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${statusTag}</td>
+                </tr>`;
+        });
+    }
+
+    // 5. ดึงคะแนนสอบกลางภาค / ปลายภาค
+    const midRec = scores.find(s => s.studentId === student.id && s.subjectId === subject.id && (s.unitValue === 'midterm' || s.unitId === 'midterm'));
+    const finalRec = scores.find(s => s.studentId === student.id && s.subjectId === subject.id && (s.unitValue === 'final' || s.unitId === 'final'));
+
+    const midScore = midRec ? Number(midRec.score || 0) : 0;
+    const finalScore = finalRec ? Number(finalRec.score || 0) : 0;
+
+    // 6. คะแนนรวมทั้งหมด (คะแนนเก็บทอนสัดส่วน + กลางภาค + ปลายภาค)
+    const finalTotalScore = totalWeightedUnitScore + midScore + finalScore;
+
+    // คำนวณเกรด
+    let grade = "0";
+    if (finalTotalScore >= 80) grade = "4";
+    else if (finalTotalScore >= 75) grade = "3.5";
+    else if (finalTotalScore >= 70) grade = "3";
+    else if (finalTotalScore >= 65) grade = "2.5";
+    else if (finalTotalScore >= 60) grade = "2";
+    else if (finalTotalScore >= 55) grade = "1.5";
+    else if (finalTotalScore >= 50) grade = "1";
+
+    cardContainer.innerHTML = `
+        <div style="text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 8px; margin-bottom: 12px;">
+            <h2 style="margin: 0; color: #1e3a8a; font-size: 20px;">รายงานสรุปผลการเรียนรายบุคคล</h2>
+            <p style="margin: 3px 0 0 0; color: #475569; font-size: 13px;"><b>วิชา:</b> ${subject.code || ''} ${subject.name} (${subject.grade || ''})</p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; background: #f8fafc; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 12px; font-size: 13px;">
+            <div>
+                <span><b>ชื่อ-สกุล:</b> ${student.name}</span><br>
+                <span><b>รหัสนักเรียน:</b> ${student.code || student.id || '-'}</span>
+            </div>
+            <div style="text-align: right;">
+                <span><b>ห้องเรียน:</b> ${student.className || '-'}</span><br>
+                <span><b>คะแนนรวม:</b> <b style="color: #2563eb; font-size: 15px;">${finalTotalScore.toFixed(2)}</b> / 100.00 | <b>เกรด:</b> <b style="color: ${grade === '0' ? '#ef4444' : '#16a34a'}; font-size: 16px;">${grade}</b></span>
+            </div>
+        </div>
+
+        <h3 style="color: #0f172a; margin: 0 0 8px 0; font-size: 14px;">📊 คะแนนสรุปแยกตามบทเรียน (ทอนสัดส่วนรวม ${remainingQuota} คะแนน)</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+            <thead>
+                <tr style="background-color: #f1f5f9; color: #334155;">
+                    <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: left;">บทเรียน / รายการประเมิน</th>
+                    <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; width: 90px;">คะแนนที่ได้</th>
+                    <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; width: 90px;">คะแนนเต็ม</th>
+                    <th style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; width: 110px;">สถานะ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rowsHtml || '<tr><td colspan="4" style="text-align:center; padding:10px; color:#94a3b8;">ไม่พบข้อมูลบทเรียน</td></tr>'}
+                <tr style="background-color: #fefce8;">
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">🎯 สอบกลางภาค</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-weight: bold; color: #2563eb;">${midScore.toFixed(2)}</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; color: #64748b;">${midMax.toFixed(2)}</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">-</td>
+                </tr>
+                <tr style="background-color: #fefce8;">
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; font-weight: bold;">🎯 สอบปลายภาค</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; font-weight: bold; color: #2563eb;">${finalScore.toFixed(2)}</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center; color: #64748b;">${finalMax.toFixed(2)}</td>
+                    <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">-</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+
+    return cardContainer;
+}
 
 // ==============================
 // แสดงตารางคะแนนรวมและรายงานงานค้าง
@@ -1015,56 +1799,81 @@ renderScoreMatrix = function() {
 };
 
 
-// ==============================
-// ฟังก์ชันสร้างรายงาน PDF พร้อมกราฟเรดาร์
-// ==============================
+/// ==========================================
+// ฟังก์ชันสร้างรายงาน PDF (สรุปคะแนนรวมแยกตามบทเรียน)
+// ==========================================
 
-// 1. ส่งออกรายงานรายคน
+// ==========================================
+// ระบบส่งออกรายงาน PDF
+// ==========================================
+
+// 1. ส่งออกรายงานรายบุคคล
 async function exportSingleStudentPDF() {
-    const studentId = Number(document.getElementById("singleStudentSelect")?.value);
-    const subjectId = Number(document.getElementById("scoreSubjectSelect")?.value);
+    const studentSelect = document.getElementById("singleStudentSelect") || document.getElementById("pdfStudentSelect");
+    const subjectSelect = document.getElementById("scoreSubjectSelect");
 
-    if (!subjectId) {
+    if (!subjectSelect || !subjectSelect.value) {
         alert("กรุณาเลือกรายวิชาก่อนครับ");
         return;
     }
-    if (!studentId) {
+    if (!studentSelect || !studentSelect.value) {
         alert("กรุณาเลือกนักเรียนที่ต้องการออกรายงานครับ");
         return;
     }
 
-    const student = students.find(s => s.id === studentId);
-    const subject = subjects.find(s => s.id === subjectId);
+    const studentId = String(studentSelect.value).trim();
+    const subjectId = String(subjectSelect.value).trim();
+
+    const student = students.find(s => String(s.id).trim() === studentId || String(s.code).trim() === studentId);
+    const subject = subjects.find(s => String(s.id).trim() === subjectId);
+
+    if (!student || !subject) {
+        alert("ไม่พบข้อมูลนักเรียนหรือรายวิชา");
+        return;
+    }
+
     const printArea = document.getElementById("pdfPrintArea");
-
     printArea.style.display = "block";
-    printArea.innerHTML = ""; // ล้างค่าเก่า
+    printArea.innerHTML = ""; // ล้างหน้าเก่า
 
-    const card = await buildStudentReportCard(student, subject, 0);
+    const card = buildStudentReportCard(student, subject);
     printArea.appendChild(card);
 
     const opt = {
-        margin:       10,
-        filename:     `รายงานคะแนน_${student.name}_${subject.code}.pdf`,
+        margin:       [10, 10, 10, 10],
+        filename:     `รายงานคะแนน_${student.name}_${subject.code || subject.name}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
+        html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    await html2pdf().set(opt).from(printArea).save();
-    printArea.style.display = "none";
+    try {
+        await html2pdf().set(opt).from(printArea).save();
+    } catch (e) {
+        console.error("PDF Export Error:", e);
+    } finally {
+        printArea.style.display = "none";
+    }
 }
 
 // 2. ส่งออกรายงานทั้งชั้นเรียน
 async function exportClassPDF() {
-    const subjectId = Number(document.getElementById("scoreSubjectSelect")?.value);
+    const subjectSelect = document.getElementById("scoreSubjectSelect");
 
-    if (!subjectId) {
+    if (!subjectSelect || !subjectSelect.value) {
         alert("กรุณาเลือกรายวิชาก่อนครับ");
         return;
     }
 
-    const subject = subjects.find(s => s.id === subjectId);
+    const subjectId = String(subjectSelect.value).trim();
+    const subject = subjects.find(s => String(s.id).trim() === subjectId);
+
+    if (!subject) {
+        alert("ไม่พบข้อมูลรายวิชา");
+        return;
+    }
+
+    // กรองนักเรียนเฉพาะระดับชั้น
     const filteredStudents = students.filter(student => {
         if (!subject.grade) return true;
         return student.className && student.className.startsWith(subject.grade);
@@ -1081,130 +1890,31 @@ async function exportClassPDF() {
 
     for (let i = 0; i < filteredStudents.length; i++) {
         const student = filteredStudents[i];
-        const card = await buildStudentReportCard(student, subject, i);
+        const card = buildStudentReportCard(student, subject);
+        if (i < filteredStudents.length - 1) {
+            card.style.pageBreakAfter = "always";
+        }
         printArea.appendChild(card);
     }
 
     const opt = {
-        margin:       8,
-        filename:     `รายงานคะแนนชั้นเรียน_${subject.grade}_${subject.code}.pdf`,
+        margin:       [10, 10, 10, 10],
+        filename:     `รายงานคะแนนชั้นเรียน_${subject.grade || ''}_${subject.code || subject.name}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
+        html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    await html2pdf().set(opt).from(printArea).save();
-    printArea.style.display = "none";
-}
-
-
-// ==============================
-// ฟังก์ชันสร้างการ์ดรายงาน + กราฟ Radar
-// ==============================
-
-function buildStudentReportCard(student, subject, index) {
-    return new Promise((resolve) => {
-        const result = calculateSubjectTotal(student.id, subject.id);
-        const cardContainer = document.createElement("div");
-        cardContainer.style.cssText = "page-break-after: always; padding: 20px; font-family: sans-serif;";
-
-        // เตรียมข้อมูลกราฟ Radar (ตามบทเรียน)
-        const labels = [];
-        const studentScores = [];
-        const maxScores = [];
-
-        if (subject.units && subject.units.length > 0) {
-            subject.units.forEach(unit => {
-                labels.push(unit.name);
-                let scoreEarned = 0;
-
-                if (unit.subUnits && unit.subUnits.length > 0) {
-                    unit.subUnits.forEach(sub => {
-                        const rec = scores.find(s => s.studentId === student.id && s.subjectId === subject.id && s.subUnitId === sub.id);
-                        if (rec) scoreEarned += rec.score;
-                    });
-                } else {
-                    const rec = scores.find(s => s.studentId === student.id && s.subjectId === subject.id && s.unitId === unit.id && !s.subUnitId);
-                    if (rec) scoreEarned += rec.score;
-                }
-
-                studentScores.push(scoreEarned);
-                maxScores.push(unit.maxScore || 0);
-            });
-        }
-
-        const canvasId = `radarCanvas_${student.id}_${index}`;
-
-        cardContainer.innerHTML = `
-            <div style="text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 15px;">
-                <h2 style="margin: 0; color: #1e3a8a;">รายงานสรุปผลการเรียนและพัฒนาการ</h2>
-                <p style="margin: 5px 0 0 0; color: #475569;">วิชา ${subject.code} - ${subject.name} (${subject.grade || ''})</p>
-            </div>
-
-            <div style="display: flex; justify-content: space-between; background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px;">
-                <div>
-                    <span><b>ชื่อ-สกุล:</b> ${student.name}</span><br>
-                    <span><b>รหัสนักเรียน:</b> ${student.code || '-'}</span>
-                </div>
-                <div style="text-align: right;">
-                    <span><b>ห้องเรียน:</b> ${student.className}</span><br>
-<span><b>คะแนนรวม:</b> <b style="color: #2563eb;">${result.totalScore}</b> / 100 | <b>เกรด:</b> <b style="color: #16a34a; font-size: 16px;">${result.gradeNum}</b> (${result.gradeLetter})</span>
-                </div>
-            </div>
-
-            <div style="display: flex; align-items: center; justify-content: center; gap: 20px;">
-                <div style="width: 320px; height: 320px;">
-                    <canvas id="${canvasId}"></canvas>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(cardContainer); // แปะชั่วคราวเพื่อเรนเดอร์ Canvas
-
-        setTimeout(() => {
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            new Chart(ctx, {
-                type: 'radar',
-                data: {
-                    labels: labels.length > 0 ? labels : ['กลางภาค', 'ปลายภาค'],
-                    datasets: [{
-                        label: 'คะแนนที่ได้',
-                        data: studentScores.length > 0 ? studentScores : [
-                            (scores.find(s=>s.studentId===student.id && s.subjectId===subject.id && s.unitValue==='midterm')?.score || 0),
-                            (scores.find(s=>s.studentId===student.id && s.subjectId===subject.id && s.unitValue==='final')?.score || 0)
-                        ],
-                        backgroundColor: 'rgba(37, 99, 235, 0.2)',
-                        borderColor: '#2563eb',
-                        pointBackgroundColor: '#2563eb'
-                    }, {
-                        label: 'คะแนนเต็มบท',
-                        data: maxScores.length > 0 ? maxScores : [subject.midtermMax || 0, subject.finalMax || 0],
-                        backgroundColor: 'rgba(203, 213, 225, 0.2)',
-                        borderColor: '#94a3b8',
-                        borderDash: [5, 5]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        r: { beginAtZero: true }
-                    },
-                    plugins: {
-                        legend: { position: 'bottom' }
-                    }
-                }
-            });
-
-            setTimeout(() => {
-                resolve(cardContainer);
-            }, 300);
-        }, 100);
-    });
+    try {
+        await html2pdf().set(opt).from(printArea).save();
+    } catch (e) {
+        console.error("PDF Class Export Error:", e);
+    } finally {
+        printArea.style.display = "none";
+    }
 }
 // 1. นำ URL จาก Google Apps Script มาวางตรงนี้
-const GAS_API_URL = "https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnTiq7_72AjKFDfPLVBqI9T0Oqa-9wdNSAOXviWQ8Up2a9x1WIEIqNstkkWdKVvztzNpz9CxvQolGBtbl9iWTYCv5YFmEUzMsFaLvX0pYW9G0EHxyci8xY7jk1gHPPaZWllOS6RscIWLqCU1IJFoGhdGlT3xxKRTybRBSGbYZIxR6E7d791xe1-Hv5WMzP1HCcJnb85xiJ6k91IIxiIZfH3Vuuk78UdOl9FTtKn4avDogYY-STgifIx_lX1vOOxp5Qvi-1gFCu-TZPcel3LWHovzD2L9Bw&lib=M0H6212ObtVxveWcmtSYgQLlCWkN5VxJb"; 
-
+const GAs_API_URL = "https://script.google.com/macros/s/AKfycbxxO1mRa-X2CXbL05_Wst_m3tzbzjr-XZbg4rNfdqsnuWpYCCVBkKUUWAEGFlYpJh0/exec";
 // 2. ฟังก์ชันบันทึกคะแนนตรงลง Google Drive
 async function saveMatrixScore(studentId, subjectId, unitKey, unitId, subUnitId, maxScore, inputElem) {
     const scoreVal = parseFloat(inputElem.value);
@@ -1277,7 +1987,358 @@ async function loadScoresFromDrive() {
         console.log("ยังไม่มีข้อมูลเก่าใน Drive หรือโหลดไม่สำเร็จ:", e);
     }
 }
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxxO1mRa-X2CXbL05_Wst_m3tzbzjr-XZbg4rNfdqsnuWpYCCVBkKUUWAEGFlYpJh0/exec";
+// ==========================================
+// ระบบบันทึก Session และควบคุมการเข้า/ออกจากระบบ
+// ==========================================
 
-window.addEventListener("DOMContentLoaded", loadScoresFromDrive);
+// 1. ฟังก์ชันสลับสิทธิ์การเข้าใช้งานระหว่าง นักเรียน และ ครู หน้าแรก
+function switchRole(role) {
+    const studentForm = document.getElementById('studentLoginForm');
+    const teacherForm = document.getElementById('teacherLoginForm');
+    const btnStudent = document.getElementById('btnRoleStudent');
+    const btnTeacher = document.getElementById('btnRoleTeacher');
+
+    if (role === 'student') {
+        if (studentForm) studentForm.style.display = 'block';
+        if (teacherForm) teacherForm.style.display = 'none';
+        if (btnStudent) btnStudent.classList.add('active');
+        if (btnTeacher) btnTeacher.classList.remove('active');
+    } else {
+        if (studentForm) studentForm.style.display = 'none';
+        if (teacherForm) teacherForm.style.display = 'block';
+        if (btnTeacher) btnTeacher.classList.add('active');
+        if (btnStudent) btnStudent.classList.remove('active');
+    }
+}
+
+// 2. ฟังก์ชันล็อกอินครู (เรียกใช้ตอนกดปุ่มล็อกอินครู)
+function loginTeacher() {
+    // 💾 บันทึกสถานะ Session ไว้ใน LocalStorage
+    localStorage.setItem('isLoggedIn', 'true');
+    localStorage.setItem('userRole', 'teacher');
+
+    const authContainer = document.getElementById('authContainer');
+    const teacherView = document.getElementById('teacherSystemView');
+    const studentView = document.getElementById('studentReportView');
+
+    if (authContainer) authContainer.style.display = 'none';
+    if (teacherView) teacherView.style.display = 'block';
+    if (studentView) studentView.style.display = 'none';
+
+    // โหลด/เรนเดอร์ข้อมูลตารางคะแนน
+    if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+    if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+}
+
+// 3. ฟังก์ชันล็อกอินนักเรียน (เรียกใช้ตอนกดปุ่มล็อกอินนักเรียน)
+function loginStudent() {
+    const studentCodeInput = document.getElementById('studentCodeInput');
+    const studentCode = studentCodeInput ? studentCodeInput.value.trim() : '';
+
+    if (!studentCode) {
+        alert("กรุณากรอกรหัสนักเรียน");
+        return;
+    }
+
+    // 💾 บันทึกสถานะ Session ไว้ใน LocalStorage
+    localStorage.setItem('isLoggedIn', 'true');
+    localStorage.setItem('userRole', 'student');
+    localStorage.setItem('studentCode', studentCode);
+
+    const authContainer = document.getElementById('authContainer');
+    const teacherView = document.getElementById('teacherSystemView');
+    const studentView = document.getElementById('studentReportView');
+
+    if (authContainer) authContainer.style.display = 'none';
+    if (teacherView) teacherView.style.display = 'none';
+    if (studentView) studentView.style.display = 'block';
+}
+
+// 4. ปุ่มออกจากระบบ / กลับหน้าแรก (พร้อมลบการจำ Session)
+function logout() {
+    // 🧹 ลบสถานะการจำล็อกอินออกจากเครื่อง
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('studentCode');
+
+    const authContainer = document.getElementById('authContainer');
+    const teacherView = document.getElementById('teacherSystemView');
+    const studentView = document.getElementById('studentReportView');
+
+    if (authContainer) authContainer.style.display = 'block';
+    if (teacherView) teacherView.style.display = 'none';
+    if (studentView) studentView.style.display = 'none';
+
+    const studentCodeInput = document.getElementById('studentCodeInput');
+    const teacherUser = document.getElementById('teacherUser');
+    const teacherPass = document.getElementById('teacherPass');
+
+    if (studentCodeInput) studentCodeInput.value = "";
+    if (teacherUser) teacherUser.value = "";
+    if (teacherPass) teacherPass.value = "";
+}
+
+// 5. ระบบตรวจสอบ Session ป้องกันการเด้งหลุดเมื่อ Refresh (DOMContentLoaded)
+window.addEventListener("DOMContentLoaded", () => {
+    // โหลดข้อมูลคะแนนจาก Drive ตามเดิม
+    if (typeof loadScoresFromDrive === 'function') {
+        loadScoresFromDrive();
+    }
+
+    // เช็กว่าเคยล็อกอินค้างไว้หรือไม่
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    const userRole = localStorage.getItem('userRole');
+
+    if (isLoggedIn === 'true') {
+        const authContainer = document.getElementById('authContainer');
+        const teacherView = document.getElementById('teacherSystemView');
+        const studentView = document.getElementById('studentReportView');
+
+        if (authContainer) authContainer.style.display = 'none';
+
+        if (userRole === 'teacher') {
+            if (teacherView) teacherView.style.display = 'block';
+            if (studentView) studentView.style.display = 'none';
+            if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+        } else if (userRole === 'student') {
+            if (studentView) studentView.style.display = 'block';
+            if (teacherView) teacherView.style.display = 'none';
+        }
+    }
+});
+
+// 2. ฟังก์ชันตรวจสอบงานค้างของนักเรียน
+async function checkStudentPendingTasks() {
+    const inputElem = document.getElementById('studentCodeInput');
+    if (!inputElem) return;
+    
+    const code = inputElem.value.trim();
+    if (!code) {
+        alert("กรุณากรอกเลขประจำตัวนักเรียน");
+        return;
+    }
+
+    // ตรวจสอบว่ามีข้อมูลนักเรียนในระบบหรือไม่
+    if (typeof students === 'undefined' || !Array.isArray(students) || students.length === 0) {
+        alert("ยังไม่มีข้อมูลนักเรียนในระบบ");
+        return;
+    }
+
+    // ค้นหานักเรียนจากเลขประจำตัว หรือ ID
+    const student = students.find(s => 
+        (s.code && String(s.code).trim() === code) || 
+        (s.id && String(s.id).trim() === code)
+    );
+
+    if (!student) {
+        alert(`ไม่พบข้อมูลนักเรียนที่มีเลขประจำตัว: ${code}`);
+        return;
+    }
+
+    // โหลดคะแนนล่าสุดจาก Google Drive (ถ้ามีฟังก์ชัน)
+    if (typeof loadScoresFromDrive === 'function') {
+        try {
+            await loadScoresFromDrive();
+        } catch (e) {
+            console.log("ไม่สามารถดึงข้อมูลคะแนนได้:", e);
+        }
+    }
+
+    // แสดงผลรายงานสถานะการส่งงาน
+    const reportContainer = document.getElementById('pendingTaskList');
+    const titleElem = document.getElementById('studentReportTitle');
+    
+    if (titleElem) {
+        titleElem.innerText = `รายงานสถานะการส่งงาน: ${student.name || ''} ${student.className ? '(' + student.className + ')' : ''}`;
+    }
+
+    if (reportContainer) {
+        reportContainer.innerHTML = "";
+
+        if (typeof subjects === 'undefined' || !Array.isArray(subjects) || subjects.length === 0) {
+            reportContainer.innerHTML = "<p style='padding: 15px;'>ไม่พบรายการวิชาในระบบ</p>";
+        } else {
+            subjects.forEach(subject => {
+                // กรองตามชั้นเรียนถ้ามีการกำหนดชั้น
+                if (subject.grade && student.className && !student.className.startsWith(subject.grade)) return;
+
+                let pendingHtml = `<div class="card" style="margin-bottom: 15px; text-align: left;"><h4>วิชา ${subject.code || ''} - ${subject.name || ''}</h4><ul style="line-height: 1.8;">`;
+                
+                if (subject.units && Array.isArray(subject.units)) {
+                    subject.units.forEach(unit => {
+                        const currentScores = typeof scores !== 'undefined' ? scores : [];
+                        const isSubmitted = currentScores.some(s => 
+                            String(s.studentId) === String(student.id) && 
+                            String(s.subjectId) === String(subject.id) && 
+                            (String(s.unitId) === String(unit.id) || String(s.unitValue) === String(unit.id)) && 
+                            Number(s.score) > 0
+                        );
+
+                        if (!isSubmitted) {
+                            pendingHtml += `<li style="color: #ef4444; font-weight: bold;">❌ ยังไม่ได้ส่ง: ${unit.name}</li>`;
+                        } else {
+                            pendingHtml += `<li style="color: #10b981;">✅ ส่งแล้ว: ${unit.name}</li>`;
+                        }
+                    });
+                } else {
+                    pendingHtml += `<li>ไม่มีรายการหน่วยการเรียนรู้</li>`;
+                }
+
+                pendingHtml += `</ul></div>`;
+                reportContainer.innerHTML += pendingHtml;
+            });
+        }
+    }
+
+    // สลับหน้าจอแสดงผล
+    const authBox = document.getElementById('authContainer');
+    const reportBox = document.getElementById('studentReportView');
+    
+    if (authBox) authBox.style.display = 'none';
+    if (reportBox) reportBox.style.display = 'block';
+}
+
+// 3. ฟังก์ชันออกจากระบบ / กลับหน้าหลัก
+function logout() {
+    const authBox = document.getElementById('authContainer');
+    const reportBox = document.getElementById('studentReportView');
+    const teacherBox = document.getElementById('teacherSystemView');
+
+    if (authBox) authBox.style.display = 'block';
+    if (reportBox) reportBox.style.display = 'none';
+    if (teacherBox) teacherBox.style.display = 'none';
+
+    const inputStudent = document.getElementById('studentCodeInput');
+    const inputUser = document.getElementById('teacherUser');
+    const inputPass = document.getElementById('teacherPass');
+
+    if (inputStudent) inputStudent.value = "";
+    if (inputUser) inputUser.value = "";
+    if (inputPass) inputPass
+    .value = "";
+}
+// ==========================================
+// ระบบแก้ไขสัดส่วนคะแนนสอบกลางภาค / ปลายภาค
+// ==========================================
+
+// 1. ฟังก์ชันเปิดหน้าต่าง Modal สำหรับแก้ไขสัดส่วนคะแนน
+function openEditSubjectModal(subjectId) {
+    if (!subjectId) {
+        alert("กรุณาเลือกรายวิชาที่ต้องการแก้ไขก่อนครับ");
+        return;
+    }
+
+    const subject = subjects.find(s => String(s.id).trim() === String(subjectId).trim());
+    if (!subject) {
+        alert("ไม่พบข้อมูลรายวิชา");
+        return;
+    }
+
+    // ดึงค่าเดิมที่มีอยู่ ถ้าไม่มีจะใช้ Default (กลางภาค 20, ปลายภาค 30)
+    const midMax = subject.midtermMax || subject.midtermScore || 20;
+    const finalMax = subject.finalMax || subject.finalScore || 30;
+    const unitsQuota = 100 - midMax - finalMax;
+
+    // เช็กว่ามี Modal เดิมอยู่หรือไม่ ถ้ามีให้ลบทิ้งก่อน
+    closeEditSubjectModal();
+
+    const modalHtml = `
+    <div id="editSubjectModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999;">
+        <div style="background: #fff; padding: 25px; border-radius: 12px; width: 90%; max-width: 420px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-family: 'Sarabun', sans-serif;">
+            <h3 style="margin-top: 0; color: #1e3a8a; border-bottom: 2px solid #2563eb; padding-bottom: 8px; font-size: 18px;">⚙️ แก้ไขสัดส่วนคะแนนสอบ</h3>
+            
+            <p style="font-weight: bold; color: #1e293b; margin-bottom: 15px; font-size: 14px;">วิชา: ${subject.code || ''} ${subject.name}</p>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 13px; font-weight: bold; margin-bottom: 4px; color: #334155;">🎯 คะแนนเต็มสอบกลางภาค:</label>
+                <input type="number" id="editMidtermScore" value="${midMax}" min="0" max="100" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" oninput="updateQuotaPreview()">
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 13px; font-weight: bold; margin-bottom: 4px; color: #334155;">🎯 คะแนนเต็มสอบปลายภาค:</label>
+                <input type="number" id="editFinalScore" value="${finalMax}" min="0" max="100" style="width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box;" oninput="updateQuotaPreview()">
+            </div>
+
+            <div style="background: #f1f5f9; padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 18px; color: #475569;">
+                📖 คะแนนเก็บรวมทุกบทเรียน (ทอนให้อัตโนมัติ): <br>
+                <strong id="quotaPreviewText" style="color: #2563eb; font-size: 15px;">${unitsQuota} คะแนน</strong>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" onclick="closeEditSubjectModal()" style="padding: 8px 16px; background: #94a3b8; color: #fff; border: none; border-radius: 6px; cursor: pointer;">ยกเลิก</button>
+                <button type="button" onclick="saveSubjectExamSettings('${subject.id}')" style="padding: 8px 16px; background: #2563eb; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">💾 บันทึก</button>
+            </div>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+// 2. คำนวณตัวเลขพรีวิวขณะพิมพ์
+function updateQuotaPreview() {
+    const mid = Number(document.getElementById('editMidtermScore')?.value || 0);
+    const final = Number(document.getElementById('editFinalScore')?.value || 0);
+    const quota = 100 - mid - final;
+    const quotaEl = document.getElementById('quotaPreviewText');
+    if (quotaEl) {
+        if (quota < 0) {
+            quotaEl.style.color = '#ef4444';
+            quotaEl.innerText = `เกินกำหนด (${quota} คะแนน)`;
+        } else {
+            quotaEl.style.color = '#2563eb';
+            quotaEl.innerText = `${quota} คะแนน`;
+        }
+    }
+}
+
+// 3. ฟังก์ชันปิด Modal
+function closeEditSubjectModal() {
+    const modal = document.getElementById('editSubjectModal');
+    if (modal) modal.remove();
+}
+
+// 4. บันทึกสัดส่วนคะแนนใหม่เข้าตัวแปรระบบ
+async function saveSubjectExamSettings(subjectId) {
+    const midVal = Number(document.getElementById('editMidtermScore').value || 0);
+    const finalVal = Number(document.getElementById('editFinalScore').value || 0);
+
+    if (midVal + finalVal > 100) {
+        alert("ผลรวมคะแนนสอบกลางภาค + ปลายภาค ต้องไม่เกิน 100 คะแนนครับ");
+        return;
+    }
+
+    const subject = subjects.find(s => String(s.id).trim() === String(subjectId).trim());
+    if (subject) {
+        subject.midtermMax = midVal;
+        subject.midtermScore = midVal;
+        subject.finalMax = finalVal;
+        subject.finalScore = finalVal;
+
+        // คำนวณและอัปเดตการแสดงผลตารางสดๆ ทันที
+        if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+        if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+
+        closeEditSubjectModal();
+        alert("อัปเดตสัดส่วนคะแนนสอบเรียบร้อยแล้วครับ!");
+
+        // ส่งบันทึกไปยัง Google Apps Script (ถ้ามี)
+        if (typeof GAS_API_URL !== 'undefined') {
+            try {
+                await fetch(GAS_API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "updateSubjectExamMax",
+                        subjectId: subjectId,
+                        midtermMax: midVal,
+                        finalMax: finalVal
+                    })
+                });
+            } catch (e) {
+                console.error("บันทึกลง Google Sheets ล้มเหลว:", e);
+            }
+        }
+    }
+}
 // เริ่มต้นโปรแกรม
 updateAll();

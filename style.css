@@ -150,5 +150,39 @@ th {
         box-shadow: 2px 0 5px rgba(0,0,0,0.1);
     }
 }
+.role-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.role-selector button {
+    flex: 1;
+    padding: 10px;
+    background: #e2e8f0;
+    color: #334155;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.role-selector button.active {
+    background: #2563eb;
+    color: white;
+    font-weight: bold;
+}
+.login-box input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+.subject-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 12px;
+}
 
 }
