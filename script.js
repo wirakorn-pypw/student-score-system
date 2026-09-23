@@ -2031,51 +2031,39 @@ async function saveMatrixScore(studentId, subjectId, unitKey, unitId, subUnitId,
 // ฟังก์ชันโหลดข้อมูลนักเรียนและคะแนนจาก Google Sheets (พร้อมดึงข้อมูลจริงขึ้นตาราง)
 // ==========================================
 async function loadScoresFromDrive() {
-    // 1. อ่านค่าจาก localStorage ก่อน (ถ้ามี)
-    const localStudents = localStorage.getItem('students');
-    const localScores = localStorage.getItem('scores');
+    if (typeof GAS_API_URL === 'undefined' || GAS_API_URL === "") return;
 
-    if (localStudents) {
-        try { students = JSON.parse(localStudents); } catch (e) {}
-    }
-    if (localScores) {
-        try { scores = JSON.parse(localScores); } catch (e) {}
-    }
+    try {
+        const response = await fetch(GAS_API_URL + "?action=getData");
+        const data = await response.json();
 
-    // เรนเดอร์รอบแรกจากความจำเบราว์เซอร์
-    if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
-    if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
-
-    // 2. ดึงข้อมูลจริงทั้งหมดจาก Google Sheets ผ่าน GAS
-    if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL !== "") {
-        try {
-            // ใช้ mode: 'cors' หรือ query string เพื่อดึงข้อมูล JSON
-            const response = await fetch(GAS_API_URL + "?action=getData");
-            const data = await response.json();
-
-            // ถ้ามีข้อมูลนักเรียนส่งกลับมาจาก Sheets ให้เอามาทับตัวแปรหลัก
-            if (data && data.students && data.students.length > 0) {
-                students = data.students;
-                localStorage.setItem('students', JSON.stringify(students));
-            }
-
-            // ถ้ามีข้อมูลคะแนนส่งกลับมาจาก Sheets ให้เอามาทับตัวแปรหลัก
-            if (data && data.scores && data.scores.length > 0) {
-                scores = data.scores;
-                localStorage.setItem('scores', JSON.stringify(scores));
-            }
-
-            // 3. บังคับวาดตารางและคะแนนใหม่อีกครั้งทันทีที่ได้ข้อมูลจาก Sheets
-            if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
-            if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
-
-            console.log("โหลดข้อมูลจาก Google Sheets สำเร็จ:", { students, scores });
-        } catch (e) {
-            console.error("เกิดข้อผิดพลาดในการดึงข้อมูลจาก Google Sheets:", e);
+        // 1. รับรายชื่อนักเรียน
+        if (data && data.students && data.students.length > 0) {
+            students = data.students;
+            localStorage.setItem('students', JSON.stringify(students));
         }
+
+        // 2. รับคะแนน
+        if (data && data.scores) {
+            scores = data.scores;
+            localStorage.setItem('scores', JSON.stringify(scores));
+        }
+
+        // 3. รับรายวิชา
+        if (data && data.subjects && data.subjects.length > 0) {
+            subjects = data.subjects;
+            localStorage.setItem('subjects', JSON.stringify(subjects));
+        }
+
+        // วาดตารางและอัปเดตการ์ดสรุป
+        if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+        if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+        if (typeof updateDashboardCards === 'function') updateDashboardCards();
+
+    } catch (e) {
+        console.error("เกิดข้อผิดพลาดในการโหลดข้อมูล:", e);
     }
 }
-
 // ==========================================
 // 2. ฟังก์ชันเพิ่มนักเรียนใหม่
 // ==========================================
@@ -2479,29 +2467,5 @@ async function saveSubjectExamSettings(subjectId) {
         }
     }
 }
-window.addEventListener("DOMContentLoaded", () => {
-    // ⚠️ ต้องมีบรรทัดนี้เพื่อสั่งให้ดึงข้อมูลจาก GAS ทันทีที่เปิดเว็บ
-    loadScoresFromDrive();
-
-    // เช็ก Session การล็อกอินค้างไว้
-    const isLoggedIn = localStorage.getItem('isLoggedIn');
-    const userRole = localStorage.getItem('userRole');
-
-    if (isLoggedIn === 'true') {
-        const authContainer = document.getElementById('authContainer');
-        const teacherView = document.getElementById('teacherSystemView');
-        const studentView = document.getElementById('studentReportView');
-
-        if (authContainer) authContainer.style.display = 'none';
-
-        if (userRole === 'teacher') {
-            if (teacherView) teacherView.style.display = 'block';
-            if (studentView) studentView.style.display = 'none';
-        } else if (userRole === 'student') {
-            if (studentView) studentView.style.display = 'block';
-            if (teacherView) teacherView.style.display = 'none';
-        }
-    }
-});
 // เริ่มต้นโปรแกรม
 updateAll();
