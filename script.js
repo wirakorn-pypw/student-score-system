@@ -2479,5 +2479,29 @@ async function saveSubjectExamSettings(subjectId) {
         }
     }
 }
+window.addEventListener("DOMContentLoaded", () => {
+    // ⚠️ ต้องมีบรรทัดนี้เพื่อสั่งให้ดึงข้อมูลจาก GAS ทันทีที่เปิดเว็บ
+    loadScoresFromDrive();
+
+    // เช็ก Session การล็อกอินค้างไว้
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    const userRole = localStorage.getItem('userRole');
+
+    if (isLoggedIn === 'true') {
+        const authContainer = document.getElementById('authContainer');
+        const teacherView = document.getElementById('teacherSystemView');
+        const studentView = document.getElementById('studentReportView');
+
+        if (authContainer) authContainer.style.display = 'none';
+
+        if (userRole === 'teacher') {
+            if (teacherView) teacherView.style.display = 'block';
+            if (studentView) studentView.style.display = 'none';
+        } else if (userRole === 'student') {
+            if (studentView) studentView.style.display = 'block';
+            if (teacherView) teacherView.style.display = 'none';
+        }
+    }
+});
 // เริ่มต้นโปรแกรม
 updateAll();
