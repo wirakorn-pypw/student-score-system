@@ -1971,7 +1971,7 @@ async function exportClassPDF() {
     }
 }
 // 1. นำ URL จาก Google Apps Script มาวางตรงนี้
-const GAs_API_URL = "https://script.google.com/a/macros/pypw.ac.th/s/AKfycbw8w2q90zsTwgWm7ZQtMDzL3cCx4SsFLNnMzPuLJWzizQAJFZlBsCtyzwzM3ELNG8_M/exec";
+const GAs_API_URL = "https://script.google.com/macros/s/AKfycbz5hDwV3iXL937FYO5nZ57_7IdEWWI2K8G6fyqRTPuPwsVjgrx3ZqrQT7LtbvwpfEXf/exec";
 // 2. ฟังก์ชันบันทึกคะแนนตรงลง Google Drive
 async function saveMatrixScore(studentId, subjectId, unitKey, unitId, subUnitId, maxScore, inputElem) {
     const scoreVal = parseFloat(inputElem.value);
@@ -2027,42 +2027,51 @@ async function saveMatrixScore(studentId, subjectId, unitKey, unitId, subUnitId,
 // ==========================================
 // 1. ฟังก์ชันโหลดข้อมูลนักเรียนและคะแนน
 // ==========================================
+// ==========================================
+// ฟังก์ชันโหลดข้อมูลนักเรียนและคะแนนจาก Google Sheets (พร้อมดึงข้อมูลจริงขึ้นตาราง)
+// ==========================================
 async function loadScoresFromDrive() {
-    // ดึงข้อมูลจาก localStorage มาแสดงก่อนทันทีเพื่อความเร็ว
+    // 1. อ่านค่าจาก localStorage ก่อน (ถ้ามี)
     const localStudents = localStorage.getItem('students');
     const localScores = localStorage.getItem('scores');
-    
+
     if (localStudents) {
-        students = JSON.parse(localStudents);
+        try { students = JSON.parse(localStudents); } catch (e) {}
     }
     if (localScores) {
-        scores = JSON.parse(localScores);
+        try { scores = JSON.parse(localScores); } catch (e) {}
     }
 
-    // แสดงผลบนหน้าเว็บทันที
+    // เรนเดอร์รอบแรกจากความจำเบราว์เซอร์
     if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
     if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
 
-    // ดึงข้อมูลล่าสุดจาก Google Sheets (ถ้ามี GAS_API_URL)
+    // 2. ดึงข้อมูลจริงทั้งหมดจาก Google Sheets ผ่าน GAS
     if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL !== "") {
         try {
+            // ใช้ mode: 'cors' หรือ query string เพื่อดึงข้อมูล JSON
             const response = await fetch(GAS_API_URL + "?action=getData");
             const data = await response.json();
-            
-            if (data.students && data.students.length > 0) {
+
+            // ถ้ามีข้อมูลนักเรียนส่งกลับมาจาก Sheets ให้เอามาทับตัวแปรหลัก
+            if (data && data.students && data.students.length > 0) {
                 students = data.students;
                 localStorage.setItem('students', JSON.stringify(students));
             }
-            if (data.scores) {
+
+            // ถ้ามีข้อมูลคะแนนส่งกลับมาจาก Sheets ให้เอามาทับตัวแปรหลัก
+            if (data && data.scores && data.scores.length > 0) {
                 scores = data.scores;
                 localStorage.setItem('scores', JSON.stringify(scores));
             }
 
-            // เรนเดอร์ใหม่อีกครั้งเมื่อได้ข้อมูลล่าสุดจาก Sheets
+            // 3. บังคับวาดตารางและคะแนนใหม่อีกครั้งทันทีที่ได้ข้อมูลจาก Sheets
             if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
             if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+
+            console.log("โหลดข้อมูลจาก Google Sheets สำเร็จ:", { students, scores });
         } catch (e) {
-            console.error("ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้:", e);
+            console.error("เกิดข้อผิดพลาดในการดึงข้อมูลจาก Google Sheets:", e);
         }
     }
 }
@@ -2117,7 +2126,7 @@ async function addStudent(code, name, className) {
         }
     }
 }
-const GAS_API_URL = "https://script.google.com/a/macros/pypw.ac.th/s/AKfycbw8w2q90zsTwgWm7ZQtMDzL3cCx4SsFLNnMzPuLJWzizQAJFZlBsCtyzwzM3ELNG8_M/exec";
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz5hDwV3iXL937FYO5nZ57_7IdEWWI2K8G6fyqRTPuPwsVjgrx3ZqrQT7LtbvwpfEXf/exec";
 // ==========================================
 // ระบบบันทึก Session และควบคุมการเข้า/ออกจากระบบ
 // ==========================================
