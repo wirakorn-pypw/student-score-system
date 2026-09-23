@@ -2,7 +2,13 @@
 // ข้อมูลหลัก
 // ==============================
 
-let students = JSON.parse(localStorage.getItem("students")) || [];
+// กำหนดข้อมูลเริ่มต้นหาก localStorage หรือ Google Sheets ยังไม่มีข้อมูล
+let students = JSON.parse(localStorage.getItem('students')) || [
+    { id: "5345", code: "5345", name: "กรวิชญ์", className: "ม.6/1" },
+    { id: "5344", code: "5344", name: "กนกพร", className: "ม.6/1" },
+    { id: "5346", code: "5346", name: "กุสุมาภรณ์", className: "ม.6/1" },
+    { id: "5349", code: "5349", name: "ญาณิศา", className: "ม.6/1" }
+];
 let subjects = JSON.parse(localStorage.getItem("subjects")) || [];
 let scores = JSON.parse(localStorage.getItem("scores")) || [];
 
@@ -49,7 +55,58 @@ function addStudent() {
 
     updateAll();
 }
+// ฟังก์ชันเพิ่มนักเรียนใหม่แบบสมบูรณ์
+async function addStudent(code, name, className) {
+    if (!code || !name) {
+        alert("กรุณากรอกรหัสและชื่อนักเรียนให้ครบถ้วน");
+        return;
+    }
 
+    const cleanCode = String(code).trim();
+    const cleanName = String(name).trim();
+    const cleanClass = className ? String(className).trim() : "ม.6/1";
+
+    // เช็กนักเรียนซ้ำ
+    const isDuplicate = students.some(s => String(s.id).trim() === cleanCode || String(s.code).trim() === cleanCode);
+    if (isDuplicate) {
+        alert("รหัสนักเรียนนี้มีอยู่ในระบบแล้วครับ");
+        return;
+    }
+
+    const newStudent = {
+        id: cleanCode,
+        code: cleanCode,
+        name: cleanName,
+        className: cleanClass
+    };
+
+    // 1. เพิ่มเข้าตัวแปรในระบบ
+    students.push(newStudent);
+
+    // 2. บันทึกลงความจำเบราว์เซอร์
+    localStorage.setItem('students', JSON.stringify(students));
+
+    // 3. วาดตารางแสดงผลใหม่ทันที
+    if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+    if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+
+    alert(`เพิ่มนักเรียน ${cleanName} เรียบร้อยแล้ว!`);
+
+    // 4. ส่งไปบันทึกลง Google Sheets (ถ้าเปิดใช้)
+    if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL !== "") {
+        try {
+            await fetch(GAS_API_URL, {
+                method: "POST",
+                body: JSON.stringify({
+                    action: "addStudent",
+                    student: newStudent
+                })
+            });
+        } catch (e) {
+            console.error("ส่งข้อมูลลง Google Sheets ไม่สำเร็จ:", e);
+        }
+    }
+}
 // ==============================
 // จัดการนำเข้าไฟล์นักเรียน (CSV / XLSX / XLS)
 // ==============================
