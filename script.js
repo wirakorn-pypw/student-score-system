@@ -1971,7 +1971,7 @@ async function exportClassPDF() {
     }
 }
 // 1. นำ URL จาก Google Apps Script มาวางตรงนี้
-const GAs_API_URL = "https://script.google.com/macros/s/AKfycbz5hDwV3iXL937FYO5nZ57_7IdEWWI2K8G6fyqRTPuPwsVjgrx3ZqrQT7LtbvwpfEXf/exec";
+const GAs_API_URL = "https://script.google.com/macros/s/AKfycbxjuMkuZDfhOgThGScd6BaDHzXwmDkjJCaJ4f1LNONlyQ5fzfzZlneM6UTarylqd4s/exec";
 // 2. ฟังก์ชันบันทึกคะแนนตรงลง Google Drive
 async function saveMatrixScore(studentId, subjectId, unitKey, unitId, subUnitId, maxScore, inputElem) {
     const scoreVal = parseFloat(inputElem.value);
@@ -2126,7 +2126,7 @@ async function addStudent(code, name, className) {
         }
     }
 }
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz5hDwV3iXL937FYO5nZ57_7IdEWWI2K8G6fyqRTPuPwsVjgrx3ZqrQT7LtbvwpfEXf/exec";
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxjuMkuZDfhOgThGScd6BaDHzXwmDkjJCaJ4f1LNONlyQ5fzfzZlneM6UTarylqd4s/exec";
 // ==========================================
 // ระบบบันทึก Session และควบคุมการเข้า/ออกจากระบบ
 // ==========================================
