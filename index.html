@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบคำนวณคะแนนนักเรียน</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<!-- 1. นำสคริปต์นี้ไปวางไว้ในแท็ก <head> ของ index.html -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+
+<!-- 2. เพิ่มปุ่ม และคอนเทนเนอร์สำหรับพิมพ์ PDF ไว้ท้าย <section id="scores"> -->
+<div style="margin-top: 30px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    <h3 style="margin-top: 0; color: #1d4ed8;">📄 ส่งออกรายงาน PDF (พร้อมกราฟเรดาร์)</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 15px;">
+        <button onclick="exportClassPDF()" style="background: #0284c7; color: white;">📄 ออกรายงานทั้งชั้นเรียน (PDF)</button>
+        <span style="color: #94a3b8;">|</span>
+        <label><b>เลือกนักเรียนรายคน:</b></label>
+        <select id="singleStudentSelect" style="padding: 8px; border-radius: 6px; border: 1px solid #ccc; width: 200px;">
+            <option value="">-- เลือกรายบุคคล --</option>
+        </select>
+        <button onclick="exportSingleStudentPDF()" style="background: #16a34a; color: white;">👤 ออกรายงานรายคน (PDF)</button>
+    </div>
+</div>
+
+<!-- คอนเทนเนอร์ซ่อนไว้สำหรับเรนเดอร์ PDF -->
+<div id="pdfPrintArea" style="display: none; background: white; padding: 20px;"></div>
+<!-- คอนเทนเนอร์ซ่อนไว้สำหรับเรนเดอร์ PDF -->
+<div id="pdfPrintArea" style="display: none; background: white; padding: 20px;"></div>
+<!-- 2. แก้ไขส่วนอัปโหลดไฟล์ในแท็ก <section id="students"> -->
+<div class="form-box" style="margin-top: 15px; border-top: 1px dashed #ddd; padding-top: 15px;">
+    <label style="align-self: center; font-weight: bold;">นำเข้าจากไฟล์ (CSV / Excel):</label>
+    <input type="text" id="importClass" placeholder="ระบุห้อง เช่น ม.3/1">
+    <input type="file" id="csvFileInput" accept=".csv, .xlsx, .xls">
+    <button onclick="importStudentsFromFile()">📥 นำเข้าข้อมูล</button>
+</div>
+<body>
+
+    <div class="container">
+
+        <header>
+            <h1>📚 ระบบคำนวณคะแนนนักเรียน</h1>
+            <p>ระบบจัดการคะแนนสำหรับใช้งานส่วนตัว</p>
+        </header>
+
+        <nav>
+            <button onclick="showPage('home')">🏠 หน้าหลัก</button>
+            <button onclick="showPage('students')">👨‍🎓 นักเรียน</button>
+            <button onclick="showPage('subjects')">📚 วิชา</button>
+            <button onclick="showPage('scores')">🧮 กรอกคะแนน</button>
+        </nav>
+
+        <main>
+
+            <!-- หน้าหลัก -->
+            <section id="home" class="page">
+                <h2>หน้าหลัก</h2>
+
+                <div class="cards">
+                    <div class="card">
+                        <span>👨‍🎓</span>
+                        <h3>นักเรียน</h3>
+                        <strong id="studentCount">0</strong>
+                    </div>
+
+                    <div class="card">
+                        <span>📚</span>
+                        <h3>วิชา</h3>
+                        <strong id="subjectCount">0</strong>
+                    </div>
+
+                    <div class="card">
+                        <span>📝</span>
+                        <h3>คะแนน</h3>
+                        <strong id="scoreCount">0</strong>
+                    </div>
+                </div>
+            </section>
+
+
+           <!-- นักเรียน -->
+<!-- ค้นหา <section id="students" class="page hidden"> ใน index.html แล้วปรับปรุงโครงสร้างดังนี้ -->
+<section id="students" class="page hidden">
+    <h2>👨‍🎓 จัดการนักเรียน</h2>
+
+    <!-- ฟอร์มเพิ่มรายบุคคล -->
+    <div class="form-box">
+        <input type="text" id="studentCode" placeholder="รหัสนักเรียน">
+        <input type="text" id="studentName" placeholder="ชื่อ-นามสกุล">
+        <input type="text" id="studentClass" placeholder="ห้อง เช่น ม.4/1">
+        <button onclick="addStudent()">+ เพิ่มนักเรียน</button>
+    </div>
+
+    <!-- ส่วนนำเข้าข้อมูลจากไฟล์ CSV/Excel -->
+    <div class="form-box" style="margin-top: 15px; border-top: 1px dashed #ddd; padding-top: 15px;">
+        <label style="align-self: center; font-weight: bold;">นำเข้าจากไฟล์ (CSV / Excel):</label>
+        <input type="text" id="importClass" placeholder="ระบุห้อง เช่น ม.4/1">
+        <input type="file" id="csvFileInput" accept=".csv, .xlsx, .xls">
+        <button onclick="importStudentsFromFile()">📥 นำเข้าข้อมูล</button>
+    </div>
+
+    <!-- ส่วนจัดการและกรองโฟลเดอร์/ห้องเรียน -->
+    <div style="margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div>
+            <label for="classFilterSelect" style="font-weight: bold; margin-right: 8px;">📁 เลือกดูตามห้อง/โฟลเดอร์:</label>
+            <select id="classFilterSelect" onchange="renderStudents()" style="padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1; font-weight: bold; color: #1e293b;">
+                <option value="ALL">📂 แสดงทุกห้อง</option>
+            </select>
+        </div>
+        <div>
+            <button onclick="deleteStudentsBySelectedClass()" style="background: #eab308; color: white;">🗑️ ลบนักเรียนห้องที่เลือก</button>
+            <button onclick="clearAllStudents()" style="background: #ef4444; color: white; margin-left: 5px;">⚠️ ล้างข้อมูลทั้งหมด</button>
+        </div>
+    </div>
+
+    <table style="margin-top: 15px;">
+        <thead>
+            <tr>
+                <th>เลขที่</th>
+                <th>รหัสนักเรียน</th>
+                <th>ชื่อ-นามสกุล</th>
+                <th>ห้อง/ชั้น</th>
+                <th>จัดการ</th>
+            </tr>
+        </thead>
+        <tbody id="studentTable"></tbody>
+    </table>
+</section>
+
+
+<!-- ค้นหา <section id="subjects" class="page hidden"> ใน index.html แล้วปรับปรุงส่วนฟอร์มเพิ่มวิชาดังนี้ -->
+<section id="subjects" class="page hidden">
+    <h2>📚 จัดการวิชาและบทเรียน</h2>
+
+    <!-- 1. ฟอร์มเพิ่มวิชา (เพิ่มฟิลด์ระดับชั้น) -->
+    <div class="form-box">
+        <select id="subjectGrade" style="width: 110px; font-weight: bold;">
+            <option value="ม.1">ม.1</option>
+            <option value="ม.2">ม.2</option>
+            <option value="ม.3">ม.3</option>
+            <option value="ม.4" selected>ม.4</option>
+            <option value="ม.5">ม.5</option>
+            <option value="ม.6">ม.6</option>
+        </select>
+        <input type="text" id="subjectCode" placeholder="รหัสวิชา เช่น ว30101" style="width: 140px;">
+        <input type="text" id="subjectName" placeholder="ชื่อวิชา เช่น ฟิสิกส์ 1">
+        <input type="number" id="midtermScore" placeholder="ฟิกซ์กลางภาค" value="20" min="0" max="100" style="width: 120px;">
+        <input type="number" id="finalScore" placeholder="ฟิกซ์ปลายภาค" value="30" min="0" max="100" style="width: 120px;">
+        <button onclick="addSubject()">+ เพิ่มวิชา</button>
+    </div>
+
+    <hr style="margin: 20px 0; border: 0; border-top: 1px dashed #ccc;">
+
+    <!-- 2. ฟอร์มเพิ่มบทเรียน -->
+    <h3>📌 เพิ่มบทเรียน</h3>
+    <div class="form-box">
+        <select id="unitSubjectSelect">
+            <option value="">-- เลือกวิชา --</option>
+        </select>
+
+        <input type="text" id="unitName" placeholder="ชื่อบทเรียน เช่น บทที่ 1 การเคลื่อนที่">
+        <button onclick="addUnit()">+ เพิ่มบทเรียน</button>
+    </div>
+
+    <!-- 3. จุดแสดงรายการวิชาพร้อมการคำนวณสัดส่วนบทเรียน -->
+    <div id="subjectListContainer" style="margin-top: 20px;"></div>
+</section>
+
+<!-- คะแนน (เปลี่ยนเป็นระบบตาราง Matrix) -->
+<section id="scores" class="page hidden">
+    <h2>📝 บันทึกคะแนนนักเรียน</h2>
+    
+    <!-- เมนูเลือกวิชา -->
+    <div style="background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <label for="scoreSubjectSelect"><b>เลือกรายวิชา:</b> </label>
+        <select id="scoreSubjectSelect" onchange="renderScoreMatrix()" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc; width: 250px;">
+            <option value="">-- เลือกวิชา --</option>
+        </select>
+    </div>
+
+    <!-- ตารางเมทริกซ์สำหรับกรอกคะแนน -->
+    <div id="matrixContainer" style="overflow-x: auto; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 30px;">
+        <p style="color: #6b7280;">กรุณาเลือกวิชาด้านบนเพื่อเริ่มกรอกคะแนน</p>
+    </div>
+
+    <!-- ตารางติดตามงานค้าง -->
+    <div style="margin-top: 30px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 30px;">
+        <h3 style="color: #dc2626; margin-top: 0;">⚠️ รายงานการขาดส่งงาน / งานค้างสะสม</h3>
+        <table border="1" style="width: 100%; border-collapse: collapse; text-align: left;">
+            <thead>
+                <tr style="background-color: #fee2e2; color: #991b1b;">
+                    <th style="padding: 8px;">รหัส</th>
+                    <th style="padding: 8px;">ชื่อ-สกุล</th>
+                    <th style="padding: 8px;">วิชา</th>
+                    <th style="padding: 8px;">รายการ / หน่วยย่อยที่ยังไม่ได้กรอกคะแนน</th>
+                </tr>
+            </thead>
+            <tbody id="missingTaskTable">
+                <!-- ข้อมูลงานค้างจะมาแสดงตรงนี้ -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ตารางสรุปคะแนนรวมและเกรด -->
+    <h3 style="margin-top: 20px;">📊 สรุปคะแนนรวมและเกรด</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>รหัส</th>
+                <th>ชื่อ-นามสกุล</th>
+                <th>วิชา</th>
+                <th>คะแนนรวม</th>
+                <th>เปอร์เซ็นต์</th>
+                <th>เกรด</th>
+            </tr>
+        </thead>
+        <tbody id="scoreTable"></tbody>
+    </table>
+</section>
+        </main>
+
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
+
+

@@ -1,0 +1,154 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, "Noto Sans Thai", sans-serif;
+    background: #f4f6f9;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: auto;
+}
+
+header {
+    background: #2563eb;
+    color: white;
+    padding: 25px;
+    border-radius: 0 0 15px 15px;
+}
+
+header h1 {
+    margin: 0 0 8px;
+}
+
+header p {
+    margin: 0;
+}
+
+nav {
+    display: flex;
+    gap: 10px;
+    padding: 15px 0;
+    flex-wrap: wrap;
+}
+
+nav button,
+button {
+    border: none;
+    background: #2563eb;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+nav button:hover,
+button:hover {
+    background: #1d4ed8;
+}
+
+.page {
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.hidden {
+    display: none;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.card {
+    background: #eff6ff;
+    padding: 25px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.card span {
+    font-size: 35px;
+}
+
+.card strong {
+    display: block;
+    font-size: 32px;
+    color: #2563eb;
+}
+
+.form-box {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 25px;
+}
+
+input,
+select {
+    padding: 11px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 15px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
+}
+
+th {
+    background: #eff6ff;
+}
+
+@media (max-width: 700px) {
+
+    .cards {
+        grid-template-columns: 1fr;
+    }
+
+    .container {
+        width: 95%;
+    }
+
+    table {
+        font-size: 13px;
+    }
+    /* ==============================
+   ตกแต่งรองรับการใช้งานบนมือถือ (Mobile Responsive)
+   ============================== */
+@media (max-width: 768px) {
+    /* ขยายช่องกรอกคะแนนใหม่อยู่ที่ขนาดกำลังดี ไม่เล็กลงเวลาเปิดในมือถือ */
+    input[type="number"] {
+        font-size: 16px !important; /* ป้องกัน iOS Auto-zoom */
+        padding: 8px !important;
+        height: 40px;
+    }
+
+    /* ตรึงคอลัมน์ชื่อ-สกุล ให้อยู่ฝั่งซ้ายตลอดเวลาปัดตาราง */
+    #matrixContainer table th:nth-child(2),
+    #matrixContainer table td:nth-child(2) {
+        position: sticky;
+        left: 0;
+        background: #ffffff;
+        z-index: 2;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    }
+}
+
+}
