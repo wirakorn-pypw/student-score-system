@@ -1914,7 +1914,7 @@ async function exportClassPDF() {
     }
 }
 // 1. นำ URL จาก Google Apps Script มาวางตรงนี้
-const GAs_API_URL = "https://script.google.com/macros/s/AKfycbxxO1mRa-X2CXbL05_Wst_m3tzbzjr-XZbg4rNfdqsnuWpYCCVBkKUUWAEGFlYpJh0/exec";
+const GAs_API_URL = "https://script.google.com/a/macros/pypw.ac.th/s/AKfycbw8w2q90zsTwgWm7ZQtMDzL3cCx4SsFLNnMzPuLJWzizQAJFZlBsCtyzwzM3ELNG8_M/exec";
 // 2. ฟังก์ชันบันทึกคะแนนตรงลง Google Drive
 async function saveMatrixScore(studentId, subjectId, unitKey, unitId, subUnitId, maxScore, inputElem) {
     const scoreVal = parseFloat(inputElem.value);
@@ -1967,27 +1967,100 @@ async function saveMatrixScore(studentId, subjectId, unitKey, unitId, subUnitId,
     }
 }
 
-// 3. ดึงคะแนนเก่าจาก Google Drive มาแสดงเมื่อเปิดเว็บ
+// ==========================================
+// 1. ฟังก์ชันโหลดข้อมูลนักเรียนและคะแนน
+// ==========================================
 async function loadScoresFromDrive() {
-    try {
-        const res = await fetch(GAS_API_URL);
-        const data = await res.json();
-        if (Array.isArray(data)) {
-            scores = data.map(item => ({
-                studentId: Number(item.studentId),
-                subjectId: Number(item.subjectId),
-                unitValue: item.unitKey,
-                unitId: item.unitId ? Number(item.unitId) : null,
-                subUnitId: item.subUnitId ? Number(item.subUnitId) : null,
-                score: Number(item.score)
-            }));
-            if (typeof renderScoreMatrix === "function") renderScoreMatrix();
+    // ดึงข้อมูลจาก localStorage มาแสดงก่อนทันทีเพื่อความเร็ว
+    const localStudents = localStorage.getItem('students');
+    const localScores = localStorage.getItem('scores');
+    
+    if (localStudents) {
+        students = JSON.parse(localStudents);
+    }
+    if (localScores) {
+        scores = JSON.parse(localScores);
+    }
+
+    // แสดงผลบนหน้าเว็บทันที
+    if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+    if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+
+    // ดึงข้อมูลล่าสุดจาก Google Sheets (ถ้ามี GAS_API_URL)
+    if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL !== "") {
+        try {
+            const response = await fetch(GAS_API_URL + "?action=getData");
+            const data = await response.json();
+            
+            if (data.students && data.students.length > 0) {
+                students = data.students;
+                localStorage.setItem('students', JSON.stringify(students));
+            }
+            if (data.scores) {
+                scores = data.scores;
+                localStorage.setItem('scores', JSON.stringify(scores));
+            }
+
+            // เรนเดอร์ใหม่อีกครั้งเมื่อได้ข้อมูลล่าสุดจาก Sheets
+            if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+            if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+        } catch (e) {
+            console.error("ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้:", e);
         }
-    } catch (e) {
-        console.log("ยังไม่มีข้อมูลเก่าใน Drive หรือโหลดไม่สำเร็จ:", e);
     }
 }
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxxO1mRa-X2CXbL05_Wst_m3tzbzjr-XZbg4rNfdqsnuWpYCCVBkKUUWAEGFlYpJh0/exec";
+
+// ==========================================
+// 2. ฟังก์ชันเพิ่มนักเรียนใหม่
+// ==========================================
+async function addStudent(code, name, className) {
+    if (!code || !name) {
+        alert("กรุณากรอกรหัสและชื่อนักเรียนให้ครบถ้วน");
+        return;
+    }
+
+    const newStudent = {
+        id: String(code).trim(),
+        code: String(code).trim(),
+        name: String(name).trim(),
+        className: className || "ม.6/1"
+    };
+
+    // เช็กว่ามีรหัสนักเรียนนี้อยู่แล้วหรือไม่
+    const exists = students.some(s => String(s.id).trim() === String(newStudent.id).trim());
+    if (exists) {
+        alert("รหัสนักเรียนนี้มีอยู่ในระบบแล้ว");
+        return;
+    }
+
+    // 1. เพิ่มเข้าอาร์เรย์ RAM
+    students.push(newStudent);
+
+    // 2. บันทึกลง localStorage ทันที
+    localStorage.setItem('students', JSON.stringify(students));
+
+    // 3. เรนเดอร์ตารางใหม่ทันที
+    if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+    if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+
+    alert("เพิ่มนักเรียนเรียบร้อยแล้ว!");
+
+    // 4. ส่งบันทึกลง Google Sheets
+    if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL !== "") {
+        try {
+            await fetch(GAS_API_URL, {
+                method: "POST",
+                body: JSON.stringify({
+                    action: "addStudent",
+                    student: newStudent
+                })
+            });
+        } catch (e) {
+            console.error("บันทึกนักเรียนลง Google Sheets ล้มเหลว:", e);
+        }
+    }
+}
+const GAS_API_URL = "https://script.google.com/a/macros/pypw.ac.th/s/AKfycbw8w2q90zsTwgWm7ZQtMDzL3cCx4SsFLNnMzPuLJWzizQAJFZlBsCtyzwzM3ELNG8_M/exec";
 // ==========================================
 // ระบบบันทึก Session และควบคุมการเข้า/ออกจากระบบ
 // ==========================================
