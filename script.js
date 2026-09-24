@@ -111,44 +111,104 @@ async function addStudent(code, name, className) {
 // จัดการนำเข้าไฟล์นักเรียน (CSV / XLSX / XLS)
 // ==============================
 
-function importStudentsFromFile() {
-    const fileInput = document.getElementById("csvFileInput");
-    const importClass = document.getElementById("importClass") ? document.getElementById("importClass").value.trim() : "";
-    const file = fileInput.files[0];
+// ฟังก์ชันนำเข้าข้อมูลนักเรียนจากไฟล์ CSV / Excel (.xlsx)
+function importStudentsFromFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-    if (!importClass || !file) {
-        alert("กรุณาระบุห้องเรียนและเลือกไฟล์ตารางข้อมูลครับ");
-        return;
-    }
-
-    const reader = new FileReader();
     const fileName = file.name.toLowerCase();
+    const reader = new FileReader();
 
-    // กรณีเป็นไฟล์ Excel (.xlsx, .xls)
+    reader.onload = function (e) {
+        let importedStudents = [];
+
+        try {
+            if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                // อ่านไฟล์ Excel (.xlsx / .xls)
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                // วนลูปอ่านข้อมูลข้าม Header แถวที่ 1 (เริ่ม i = 1)
+                for (let i = 1; i < jsonRows.length; i++) {
+                    const row = jsonRows[i];
+                    if (row && row.length > 0 && row[0]) {
+                        importedStudents.push({
+                            id: String(row[0]).trim(),
+                            code: String(row[0]).trim(),
+                            name: String(row[1] || '').trim(),
+                            className: String(row[2] || 'ม.4').trim()
+                        });
+                    }
+                }
+            } else if (fileName.endsWith('.csv')) {
+                // อ่านไฟล์ CSV
+                const text = e.target.result;
+                const lines = text.split('\n');
+
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line) {
+                        const cols = line.split(',');
+                        if (cols[0]) {
+                            importedStudents.push({
+                                id: String(cols[0]).replace(/"/g, '').trim(),
+                                code: String(cols[0]).replace(/"/g, '').trim(),
+                                name: String(cols[1] || '').replace(/"/g, '').trim(),
+                                className: String(cols[2] || 'ม.4').replace(/"/g, '').trim()
+                            });
+                        }
+                    }
+                }
+            }
+
+            if (importedStudents.length === 0) {
+                alert("ไม่พบข้อมูลนักเรียนในไฟล์ กรุณาเช็กรูปแบบไฟล์ครับ");
+                return;
+            }
+
+            // เพิ่มนักเรียนใหม่เข้าไปในอาร์เรย์เดิม (เช็กไม่ให้รหัสซ้ำ)
+            let countNew = 0;
+            importedStudents.forEach(st => {
+                const exists = students.some(s => String(s.id).trim() === st.id);
+                if (!exists) {
+                    students.push(st);
+                    countNew++;
+                }
+            });
+
+            // บันทึกลง localStorage และเรนเดอร์ตารางใหม่ทันที
+            localStorage.setItem('students', JSON.stringify(students));
+
+            if (typeof renderScoreMatrix === 'function') renderScoreMatrix();
+            if (typeof calculateAndRenderSummaryScores === 'function') calculateAndRenderSummaryScores();
+            if (typeof updateDashboardCards === 'function') updateDashboardCards();
+
+            alert(`นำเข้าข้อมูลสำเร็จ! เพิ่มนักเรียนใหม่ ${countNew} คน`);
+
+            // ส่งข้อมูลทั้งหมดไปบันทึกลง Google Sheets (ถ้ามี GAS_API_URL)
+            if (typeof GAS_API_URL !== 'undefined' && GAS_API_URL !== "") {
+                fetch(GAS_API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "importStudents",
+                        students: importedStudents
+                    })
+                }).catch(err => console.error("Sync to GAS failed:", err));
+            }
+
+        } catch (err) {
+            console.error("เกิดข้อผิดพลาดในการอ่านไฟล์:", err);
+            alert("ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบว่าเป็นไฟล์ Excel หรือ CSV ที่ถูกต้อง");
+        }
+    };
+
     if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-        reader.onload = function (e) {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            
-            // ดึง Sheet แรกสุด
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            
-            // แปลงตารางเป็น Array
-            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-            processImportedRows(rows, importClass, fileInput);
-        };
         reader.readAsArrayBuffer(file);
-    } 
-    // กรณีเป็นไฟล์ CSV
-    else {
-        reader.onload = function (e) {
-            const text = e.target.result;
-            const lines = text.split(/\r\n|\n/);
-            const rows = lines.map(line => line.split(","));
-            processImportedRows(rows, importClass, fileInput);
-        };
-        reader.readAsText(file, "UTF-8");
+    } else {
+        reader.readAsText(file, 'UTF-8');
     }
 }
 
